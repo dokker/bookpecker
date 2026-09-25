@@ -36,7 +36,8 @@ class PaddleVLEngine:
             from paddleocr import PaddleOCRVL
         except ImportError as e:  # pragma: no cover - optional dependency
             raise RuntimeError("OCR engine 'paddle_vl' needs paddleocr>=3.3 (see README)") from e
-        kwargs = dict(cfg.options)
+        kwargs = {"use_layout_detection": False, "use_doc_orientation_classify": False,
+                  "use_doc_unwarping": False, **cfg.options}
         if cfg.device:
             kwargs["device"] = cfg.device
         self._pipe = PaddleOCRVL(**kwargs)

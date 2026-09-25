@@ -71,3 +71,12 @@ def test_single_line_and_continuation():
     assert should_continue("ahol Gandalf", "Szürke várt.")
     assert not should_continue("Vége.", "következő")
     assert not should_continue("felsorolás", "• elem")
+
+
+def test_tesseract_junk_filters():
+    from bookpecker.ocr.tesseract import is_junk_line, strip_edge_junk
+
+    assert is_junk_line(["d", "Z", "H", "2", "s"])
+    assert not is_junk_line(["a", "kard", "és", "a", "pajzs"])
+    assert strip_edge_junk([("í", 60), ("30%", 13), ("kard", 95), ("[1", 40)], 70) == ["30%", "kard"]
+    assert strip_edge_junk([("a", 40), ("kard", 95)], 70) == ["a", "kard"]

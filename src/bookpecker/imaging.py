@@ -43,6 +43,17 @@ def normalize(gray: np.ndarray) -> np.ndarray:
     return np.clip(out, 0, 255).astype(np.uint8)
 
 
+def flatten(gray: np.ndarray) -> np.ndarray:
+    """Remove slowly varying background (spine shadow): divide by a blurred paper estimate."""
+    k = max(15, (min(gray.shape) // 40) | 1)  # well above stroke width, below shadow scale
+    small = cv2.resize(gray, None, fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
+    bg = cv2.morphologyEx(small, cv2.MORPH_CLOSE, np.ones((k // 4 | 1, k // 4 | 1), np.uint8))
+    bg = cv2.GaussianBlur(bg, (0, 0), k / 8)
+    bg = cv2.resize(bg, (gray.shape[1], gray.shape[0]), interpolation=cv2.INTER_LINEAR)
+    out = gray.astype(np.float32) / np.maximum(bg.astype(np.float32), 1.0) * 255.0
+    return np.clip(out, 0, 255).astype(np.uint8)
+
+
 def estimate_skew(gray: np.ndarray, max_deg: float) -> float:
     """Angle (deg) that makes text lines horizontal: maximise row-profile variance."""
     small = gray
@@ -73,6 +84,8 @@ def rotate(gray: np.ndarray, angle: float) -> np.ndarray:
 
 def preprocess(gray: np.ndarray, cfg: PreprocessCfg) -> tuple[np.ndarray, float]:
     angle = 0.0
+    if cfg.flatten:
+        gray = flatten(gray)
     if cfg.normalize:
         gray = normalize(gray)
     if cfg.deskew:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-import shutil
+import re
 import time
 from pathlib import Path
 from typing import Optional
@@ -11,7 +11,7 @@ from typing import Optional
 import typer
 import yaml
 
-from .config import find_root, list_books, load_book
+from .config import config_path, find_root, list_books, load_book
 from .pipeline import STAGES, assemble_book, process_page
 
 app = typer.Typer(add_completion=False, no_args_is_help=True,
@@ -112,28 +112,33 @@ def info(
                f"({len(skipped)} skipped)\nfirst page side: {book.first_page_side}")
 
 
+def _set_yaml_value(text: str, key: str, value: str) -> str:
+    """Replace a top-level `key:` line of the template, keeping its trailing comment."""
+    line = re.compile(rf'^{key}:[ \t]*("[^"\n]*"|[^#\n]*?)([ \t]*#.*)?$', re.M)
+    quoted = json.dumps(value, ensure_ascii=False)
+    if line.search(text):
+        return line.sub(lambda m: f"{key}: {quoted}{m.group(2) or ''}", text, count=1)
+    return f"{key}: {quoted}\n{text}"
+
+
 @app.command("new-book")
 def new_book(
     slug: str,
     pdf: Path = typer.Option(..., "--pdf", exists=True, dir_okay=False, help="Scanned PDF"),
     title: Optional[str] = typer.Option(None, "--title"),
-    copy: bool = typer.Option(False, "--copy", help="Copy the PDF into books/<slug>/ (else reference it)"),
     root: Optional[Path] = RootOpt,
 ):
-    """Create books/<slug>/book.yaml from the template."""
+    """Create books/<slug>.yaml from books/_template.yaml."""
     r = _root(root)
-    d = r / "books" / slug
-    target = d / "book.yaml"
-    if target.exists():
-        raise typer.BadParameter(f"{target} already exists")
-    d.mkdir(parents=True, exist_ok=True)
-    pdf_ref = str(pdf.resolve())
-    if copy:
-        shutil.copy2(pdf, d / "source.pdf")
-        pdf_ref = "source.pdf"
-    template = (r / "books" / "_template.yaml")
-    text = template.read_text(encoding="utf-8") if template.exists() else "title: BOOK_TITLE\npdf: PDF_PATH\n"
-    text = text.replace("PDF_PATH", pdf_ref).replace("BOOK_TITLE", title or slug)
+    existing = config_path(r, slug)
+    if existing:
+        raise typer.BadParameter(f"{existing} already exists")
+    target = r / "books" / f"{slug}.yaml"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    template = r / "books" / "_template.yaml"
+    text = template.read_text(encoding="utf-8") if template.exists() else ""
+    text = _set_yaml_value(text, "pdf", str(pdf.resolve()))
+    text = _set_yaml_value(text, "title", title or slug)
     target.write_text(text, encoding="utf-8")
     typer.echo(f"created {target}")
 

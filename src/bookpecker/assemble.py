@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
 
@@ -74,8 +75,16 @@ def _median_height(res: OcrResult) -> float:
     return float(hs[len(hs) // 2]) if hs else 0.0
 
 
-def page_items(layout: PageLayout, ocr: dict[int, OcrResult], printed: int | None = None) -> list[Item]:
+def apply_replacements(text: str, fixes: list[tuple[str, str]]) -> str:
+    for pattern, repl in fixes:
+        text = re.sub(pattern, repl, text, flags=re.M)
+    return text
+
+
+def page_items(layout: PageLayout, ocr: dict[int, OcrResult], printed: int | None = None,
+               fixes: list[tuple[str, str]] | None = None) -> list[Item]:
     items = [Item("marker", "", layout.page, printed=printed)]
+    fixes = fixes or []
     for r in layout.kept():
         res = ocr.get(r.id)
         if res is None:
@@ -89,16 +98,18 @@ def page_items(layout: PageLayout, ocr: dict[int, OcrResult], printed: int | Non
             if text:
                 items.append(Item("table", text, layout.page, group))
         elif r.kind == "title":
-            text = textfix.single_line(res.lines)
+            text = apply_replacements(textfix.single_line(res.lines), fixes)
             if text:
                 items.append(Item("heading", text, layout.page, group, _median_height(res)))
         elif r.kind == "caption":
-            text = textfix.single_line(res.lines)
+            text = apply_replacements(textfix.single_line(res.lines), fixes)
             if text:
                 items.append(Item("caption", text, layout.page, group))
         else:
             for para in textfix.paragraphs(res.lines):
-                items.append(Item("para", para, layout.page, group))
+                para = apply_replacements(para, fixes)
+                if para:
+                    items.append(Item("para", para, layout.page, group))
     return items
 
 

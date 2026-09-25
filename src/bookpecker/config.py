@@ -37,6 +37,7 @@ class PreprocessCfg(_Model):
     deskew: bool = True
     max_skew_deg: float = 3.0
     normalize: bool = True  # stretch contrast so paper ≈ white
+    flatten: bool = True  # divide out uneven lighting (spine shadow, scanner falloff)
 
 
 class HeuristicCfg(_Model):
@@ -75,6 +76,8 @@ class OcrCfg(_Model):
 class TesseractCfg(_Model):
     psm: int = 6
     oem: int = 1
+    min_word_conf: int = 30  # words without digits below this confidence are dropped (ornament noise)
+    edge_junk_conf: int = 70  # 1–2 char tokens at a line end below this are dropped
     tessdata_dir: str | None = None
     extra: str = ""
 
@@ -82,6 +85,13 @@ class TesseractCfg(_Model):
 class PaddleVLCfg(_Model):
     device: str | None = None
     options: dict[str, Any] = Field(default_factory=dict)  # passed to PaddleOCRVL(...)
+
+
+class Replacement(_Model):
+    """Regex fix applied to every paragraph/heading (multiline mode), e.g. OCR confusions."""
+
+    pattern: str
+    repl: str
 
 
 class PageConfig(_Model):
@@ -101,13 +111,16 @@ class PageConfig(_Model):
         default_factory=lambda: ["header", "footer", "page_number", "ornament", "figure"]
     )
     keep_inside_ratio: float = 0.5  # min share of a region inside the margin box to keep it
+    edge_touch: float = 0.01  # drop regions within this share of a page edge (bleed-through, borders); 0 = off
     min_region_area: float = 0.0004  # share of page area
     clip_to_content: bool = True
+    crop_pad_x: float = 0.012  # OCR slack on the spine side of regions (share of page width)
     languages: list[str] = Field(default_factory=lambda: ["hun"])
     ocr: OcrCfg = Field(default_factory=OcrCfg)
     tesseract: TesseractCfg = Field(default_factory=TesseractCfg)
     paddle_vl: PaddleVLCfg = Field(default_factory=PaddleVLCfg)
     heading_levels: Literal["flat", "auto"] = "flat"
+    replacements: list[Replacement] = Field(default_factory=list)
 
 
 BOOK_ONLY_KEYS = {"title", "pdf", "first_page_side", "skip_pages", "page_number_offset", "page_overrides"}
@@ -157,17 +170,18 @@ def deep_merge(base: dict, over: dict) -> dict:
 class Book:
     """A book: its paths, book-level settings and per-page resolved configs."""
 
-    def __init__(self, root: Path, slug: str, raw: dict):
+    def __init__(self, root: Path, slug: str, raw: dict, config_dir: Path | None = None):
         self.root = root
         self.slug = slug
         self.raw = raw
+        self.config_dir = config_dir or root / "books" / slug  # relative `pdf` paths start here
         self.title: str = raw.get("title", slug)
         pdf = raw.get("pdf")
         if not pdf:
             raise ValueError(f"{slug}: book.yaml needs a 'pdf' path")
         pdf_path = Path(pdf).expanduser()
         if not pdf_path.is_absolute():
-            candidates = [self.book_dir / pdf_path, root / pdf_path]
+            candidates = [self.config_dir / pdf_path, root / pdf_path]
             pdf_path = next((c for c in candidates if c.exists()), candidates[0])
         self.pdf = pdf_path
         self.first_page_side: Side = raw.get("first_page_side", "right")
@@ -182,10 +196,6 @@ class Book:
         self._page_count: int | None = None
 
     # --- paths ---------------------------------------------------------------------------
-    @property
-    def book_dir(self) -> Path:
-        return self.root / "books" / self.slug
-
     @property
     def work_dir(self) -> Path:
         return self.root / "work" / self.slug
@@ -254,16 +264,25 @@ def load_defaults(root: Path) -> dict:
     return {}
 
 
+def config_path(root: Path, slug: str) -> Path | None:
+    """books/<slug>.yaml or books/<slug>/book.yaml."""
+    for path in (root / "books" / f"{slug}.yaml", root / "books" / slug / "book.yaml"):
+        if path.exists():
+            return path
+    return None
+
+
 def load_book(root: Path, slug: str) -> Book:
-    path = root / "books" / slug / "book.yaml"
-    if not path.exists():
-        raise FileNotFoundError(f"no such book config: {path}")
+    path = config_path(root, slug)
+    if path is None:
+        raise FileNotFoundError(f"no book config books/{slug}.yaml or books/{slug}/book.yaml")
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    return Book(root, slug, deep_merge(load_defaults(root), raw))
+    return Book(root, slug, deep_merge(load_defaults(root), raw), path.parent)
 
 
 def list_books(root: Path) -> list[str]:
     books = root / "books"
     if not books.is_dir():
         return []
-    return sorted(p.parent.name for p in books.glob("*/book.yaml"))
+    slugs = {p.stem for p in books.glob("*.yaml")} | {p.parent.name for p in books.glob("*/book.yaml")}
+    return sorted(s for s in slugs if not s.startswith("_"))

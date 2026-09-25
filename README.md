@@ -26,7 +26,7 @@ PDF ─ rasterize ─ preprocess ─ layout ─ filter ─ reading order ─ OCR
 
 | Könyvtár | Tartalom |
 |---|---|
-| `books/<slug>/book.yaml` | könyv beállításai (verziókezelt) |
+| `books/<slug>.yaml` (vagy `books/<slug>/book.yaml`) | könyv beállításai (verziókezelt) |
 | `work/<slug>/raw, prep` | raszterizált és előfeldolgozott oldalak |
 | `work/<slug>/layout/NNNN.json` | régiók (típus, bbox, sorrend, eldobás oka) |
 | `work/<slug>/debug/NNNN.png` | **overlay a hangoláshoz** |
@@ -56,7 +56,8 @@ Opcionális, modell alapú layout (PP-DocLayout) és VLM OCR (PaddleOCR-VL):
 
 ```sh
 # GPU (CUDA 12.6 build; GTX 1650-en is fut) – vagy CPU: uv pip install paddlepaddle
-uv pip install paddlepaddle-gpu --index-url https://www.paddlepaddle.org.cn/packages/stable/cu126/
+uv pip install "paddlepaddle-gpu==3.3.1" --index-url https://www.paddlepaddle.org.cn/packages/stable/cu126/ \
+    --extra-index-url https://pypi.org/simple --index-strategy unsafe-best-match
 uv pip install -e ".[paddle]"
 ```
 
@@ -66,7 +67,7 @@ A modelleket a PaddleOCR első használatkor tölti le (`~/.paddlex`).
 
 ```sh
 bookpecker new-book kalandok --pdf ~/Scans/kalandok.pdf --title "Kalandok könyve"
-$EDITOR books/kalandok/book.yaml         # margók, hasábok, kihagyott oldalak…
+$EDITOR books/kalandok.yaml              # margók, hasábok, kihagyott oldalak…
 bookpecker layout kalandok -p 10-15      # csak layout → work/kalandok/debug/*.png megnézése
 bookpecker run kalandok -p 10-15         # OCR + Markdown ezekre az oldalakra
 bookpecker run kalandok                  # az egész könyv
@@ -84,7 +85,7 @@ Egyéb parancsok:
 | `bookpecker run <slug> --ocr-engine paddle_vl` | OCR motor felülírása (összehasonlításhoz) |
 | `bookpecker assemble <slug>` | csak a Markdown újraépítése a cache-elt OCR-ből |
 
-## Könyv beállítása (`books/<slug>/book.yaml`)
+## Könyv beállítása (`books/<slug>.yaml`)
 
 Minta: [`books/_template.yaml`](books/_template.yaml). Projekt szintű alapértékek: `config/defaults.yaml`.
 Oldalszámok mindig **1-alapú PDF-oldalindexek**.
@@ -107,6 +108,11 @@ Oldalszámok mindig **1-alapú PDF-oldalindexek**.
 | `ocr.default` | `tesseract` | OCR motor; típusonként felülírható: `ocr.text`, `ocr.title`, `ocr.table`, `ocr.caption`, `ocr.sidebar` |
 | `languages` | `[hun]` | Tesseract nyelvek |
 | `heading_levels` | `flat` | `flat`: minden cím `##`; `auto`: betűméret-klaszterek (`#`–`###`), bizonytalan esetben `flat` |
+| `edge_touch` | `0.01` | a lap szélét (ennyi arányon belül) érintő régiók eldobása – a szomszéd oldalról belógó szöveg, szegélyek |
+| `crop_pad_x` | `0.012` | OCR-ráhagyás a régiók gerinc felőli oldalán (a layout-dobozok ott gyakran levágják a sűrített sorokat) |
+| `replacements` | `[]` | könyvspecifikus regex-javítások bekezdésekre/címekre: `[{pattern: '…', repl: '…'}]` (multiline) |
+| `tesseract.min_word_conf` | `30` | számjegy nélküli szavak ez alatti konfidenciával kiesnek (ornamentum-zaj) |
+| `preprocess.flatten` | `true` | megvilágítás kiegyenlítése (gerincárnyék) |
 | `preprocess.deskew` | `true` | ferdeség-korrekció (±`max_skew_deg`) |
 | `page_overrides` | `{}` | oldaltartományonkénti felülírás, bármely fenti oldal szintű kulccsal, pl. `"37-42": {columns: 1}`, vagy `"88": {side: left}` ha egy hiányzó lap elrontja a paritást |
 
@@ -125,9 +131,16 @@ Oldalszámok mindig **1-alapú PDF-oldalindexek**.
 | Motor | Erősség | Megjegyzés |
 |---|---|---|
 | `tesseract` | gyors, CPU, jó magyar modell, sorgeometriát ad (bekezdés-felismeréshez) | táblázatot csak soronként |
-| `paddle_vl` | PaddleOCR-VL 0.9B VLM: jobb díszes fontokon, **táblázat → Markdown/HTML** | **kísérleti**; 4 GB VRAM-on szűkös, lassabb; nincs sorgeometria, a bekezdéseket a modell üres sorai és az írásjelek alapján bontjuk |
+| `paddle_vl` | PaddleOCR-VL (0.9B VLM): **táblázat → Markdown/HTML**, sorvégi elválasztást maga összevonja | **kísérleti**; nincs sorgeometria, a bekezdéseket a modell üres sorai és az írásjelek alapján bontjuk |
 
-Tipikus kombináció: `ocr: {default: tesseract, table: paddle_vl}`.
+Mért tapasztalat (Codex alapkönyv, GTX 1650 4 GB):
+
+- A PaddleOCR-VL bf16 súlyokkal jön; a Turing GPU nem tud bf16-ot, fp32-ben pedig nem fér el 4 GB-ban
+  (fp16 kényszerítéssel sem) → csak **CPU-n** fut, ~20–40 s régiónként (~15 perc/oldal).
+  Magyar ékezetekben gyengébb a Tesseractnál („mozgatörugókkal”), a `%` jelet viszont jól olvassa.
+- Ezért a javasolt beállítás: `ocr.default: tesseract`; VLM legfeljebb táblákra (`ocr: {table: paddle_vl}`,
+  `paddle_vl: {device: cpu}`).
+- A PP-DocLayout layout-modell GPU-n ~1–2 s/oldal, a teljes pipeline Tesseracttal ~15 s/oldal.
 
 ## Fejlesztés
 

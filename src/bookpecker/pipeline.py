@@ -85,15 +85,36 @@ def build_layout(gray: np.ndarray, page: int, cfg: PageConfig) -> PageLayout:
     return PageLayout(page, cfg.side, w, h, content, regions, frames)
 
 
+def region_crop(gray: np.ndarray, layout: PageLayout, r, pad_x: float) -> np.ndarray:
+    """Region plus some slack; pictures/ornaments reaching into the slack are painted white.
+
+    `pad_x` (share of page width) is added on the spine side, a few pixels elsewhere.
+    """
+    h, w = gray.shape
+    x0, y0, x1, y1 = r.box.as_int()
+    # layout boxes tend to clip the tightly set lines next to the spine: slack on that side only
+    inner, other, py = int(pad_x * w), 8, 6
+    left, right = (inner, other) if layout.side == "right" else (other, inner)
+    cx0, cy0, cx1, cy1 = max(0, x0 - left), max(0, y0 - py), min(w, x1 + right), min(h, y1 + py)
+    crop = gray[cy0:cy1, cx0:cx1].copy()
+    keep = np.zeros(crop.shape, bool)
+    keep[max(0, y0 - cy0):y1 - cy0, max(0, x0 - cx0):x1 - cx0] = True
+    for o in layout.regions:
+        if o is r or o.kind not in ("figure", "ornament", "header", "footer", "page_number"):
+            continue
+        a, b, c, d = o.box.as_int()
+        m = np.zeros(crop.shape, bool)
+        m[max(0, b - cy0):max(0, d - cy0), max(0, a - cx0):max(0, c - cx0)] = True
+        crop[m & ~keep] = 255
+    return crop
+
+
 def run_ocr(gray: np.ndarray, layout: PageLayout, cfg: PageConfig) -> dict[int, OcrResult]:
     results: dict[int, OcrResult] = {}
-    h, w = gray.shape
     for r in layout.kept():
         if r.kind not in OCR_KINDS:
             continue
-        x0, y0, x1, y1 = r.box.as_int()
-        pad = 6
-        crop = gray[max(0, y0 - pad):min(h, y1 + pad), max(0, x0 - pad):min(w, x1 + pad)]
+        crop = region_crop(gray, layout, r, cfg.crop_pad_x)
         if crop.size == 0:
             continue
         engine = get_engine(cfg.ocr.engine_for(r.kind), cfg)
@@ -139,7 +160,7 @@ def process_page(book: Book, page: int, force_from: str | None = None,
 
     layout_cfg = cfg.model_dump(include={
         "side", "margins", "columns", "full_width_ratio", "layout_engine", "heuristic", "doclayout",
-        "sidebars", "drop_kinds", "keep_inside_ratio", "min_region_area", "clip_to_content"})
+        "sidebars", "drop_kinds", "keep_inside_ratio", "edge_touch", "min_region_area", "clip_to_content"})
     if layout_cfg["layout_engine"] == "heuristic":
         layout_cfg.pop("doclayout")
     else:
@@ -156,7 +177,7 @@ def process_page(book: Book, page: int, force_from: str | None = None,
     if until == "layout":
         return
 
-    ocr_cfg = cfg.model_dump(include={"ocr", "languages", "tesseract", "paddle_vl"})
+    ocr_cfg = cfg.model_dump(include={"ocr", "languages", "tesseract", "paddle_vl", "crop_pad_x"})
     k_o = _key("ocr", ocr_cfg, k_l)
     if not fresh("ocr", k_o, p.ocr):
         log(f"  p{page:04d} ocr ({cfg.ocr.default})")
@@ -179,10 +200,12 @@ def assemble_book(book: Book, pages: list[int], log: Log = print) -> Path:
         if not (p.layout.exists() and p.ocr.exists()):
             log(f"  p{page:04d} skipped in assembly (not processed yet)")
             continue
-        mode = book.page_config(page).heading_levels
+        cfg = book.page_config(page)
+        mode = cfg.heading_levels
         layout = PageLayout.from_dict(_load_json(p.layout))
         ocr = {int(k): OcrResult.from_dict(v) for k, v in _load_json(p.ocr).items()}
-        items = asm.page_items(layout, ocr, book.printed_page(page))
+        fixes = [(f.pattern, f.repl) for f in cfg.replacements]
+        items = asm.page_items(layout, ocr, book.printed_page(page), fixes)
         per_page.append((page, items))
         all_items.extend(items)
         _save_json(page_dir / f"{page:04d}.json", {

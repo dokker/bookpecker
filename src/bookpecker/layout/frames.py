@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 
 from ..config import SidebarCfg
-from .base import Box, merge_overlapping
+from .base import Box
 
 
 def binarize_inv(gray: np.ndarray) -> np.ndarray:
@@ -63,6 +63,8 @@ def detect_frames(gray: np.ndarray, content: Box, cfg: SidebarCfg, em: float) ->
         tint = cv2.morphologyEx(tint, cv2.MORPH_CLOSE, np.ones((k * 2, k * 2), np.uint8))
         frames += _boxes_from_mask(tint, min_w, min_h, x0, y0)
 
-    # drop frames that are basically the whole content box (page borders)
-    frames = [f for f in frames if f.area < 0.85 * content.area]
-    return merge_overlapping(frames)
+    # page borders and edge ornaments reach the margin box; real sidebars sit inside it
+    tol = 0.005 * max(w, h)
+    return [f for f in frames if f.area < 0.5 * content.area
+            and f.x0 > content.x0 + tol and f.y0 > content.y0 + tol
+            and f.x1 < content.x1 - tol and f.y1 < content.y1 - tol]

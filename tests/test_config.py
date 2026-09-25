@@ -54,3 +54,24 @@ def test_margins_mirror_by_side():
     left = content_box(1000, 1000, "left", m)  # spine on the right
     assert (right.x0, right.x1) == (50, 800)
     assert (left.x0, left.x1) == (200, 950)
+
+
+def test_flat_and_folder_configs(tmp_path):
+    from bookpecker.config import list_books, load_book
+
+    (tmp_path / "books" / "b").mkdir(parents=True)
+    (tmp_path / "books" / "a.yaml").write_text('pdf: "a.pdf"\n', encoding="utf-8")
+    (tmp_path / "books" / "b" / "book.yaml").write_text('pdf: "b.pdf"\n', encoding="utf-8")
+    (tmp_path / "books" / "_template.yaml").write_text('pdf: ""\n', encoding="utf-8")
+    assert list_books(tmp_path) == ["a", "b"]
+    assert load_book(tmp_path, "a").pdf == tmp_path / "books" / "a.pdf"
+    assert load_book(tmp_path, "b").pdf == tmp_path / "books" / "b" / "b.pdf"
+
+
+def test_new_book_fills_template_lines():
+    from bookpecker.cli import _set_yaml_value
+
+    tpl = 'title: ""\npdf: ""                 # comment\nfoo: 1\n'
+    out = _set_yaml_value(_set_yaml_value(tpl, "pdf", "/x/Codex alapkönyv.pdf"), "title", "Codex")
+    assert out == 'title: "Codex"\npdf: "/x/Codex alapkönyv.pdf"                 # comment\nfoo: 1\n'
+    assert _set_yaml_value(tpl, "title", "Old: BOOK").startswith('title: "Old: BOOK"')

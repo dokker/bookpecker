@@ -66,3 +66,16 @@ def test_dropped_regions_get_no_order():
     b.dropped = "margin"
     assert names(order_regions([a, b], [], CONTENT, 1, 0.6)) == ["a"]
     assert b.order is None
+
+
+def test_dedupe_container_and_duplicate():
+    from bookpecker.layout.filters import dedupe
+
+    whole = R("whole", 100, 100, 600, 200, "title")
+    line1 = R("l1", 100, 100, 600, 145, "title")
+    line2 = R("l2", 200, 150, 500, 200, "title")
+    dup_outer = R("o", 100, 300, 600, 400)
+    dup_inner = R("i", 110, 305, 590, 395)
+    dedupe([whole, line1, line2, dup_outer, dup_inner])
+    assert whole.dropped == "container" and line1.dropped is None and line2.dropped is None
+    assert dup_inner.dropped == "duplicate" and dup_outer.dropped is None

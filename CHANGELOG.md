@@ -21,3 +21,19 @@ A formátum a [Keep a Changelog](https://keepachangelog.com/hu/1.1.0/) ajánlás
   HTML → Markdown táblák, `<!-- page N -->` jelölők.
 - Debug overlay PNG oldalanként a beállítások hangolásához.
 - Unit tesztek és szintetikus oldalas layout teszt.
+- Lapos könyvkonfig: `books/<slug>.yaml` (a `books/<slug>/book.yaml` is működik); a `new-book` a sablon
+  `title:`/`pdf:` sorait tölti ki.
+- `edge_touch`: a lap szélét érintő régiók (belógó szomszéd oldal, szegélyek) eldobása.
+- `replacements`: könyvspecifikus regex-javítások (pl. Tesseract `%` → `96` tévesztés).
+- Megvilágítás-kiegyenlítés (`preprocess.flatten`) a gerincárnyék ellen.
+- OCR-ráhagyás a gerinc felőli oldalon, a ráhagyásba lógó képek/ornamentumok kifehérítése.
+- Tesseract zajszűrés: alacsony konfidenciájú szavak, sorvégi töredékek, ornamentumból olvasott „szemét sorok”.
+- Egymásba ágyazott duplikált layout-régiók (pl. kétsoros cím háromszor) kiszűrése.
+
+### Changed
+- A sidebar-keretjelöltek közül kiesnek a képekre/ornamentumokra eső és a tartalomdoboz szélét érintő
+  jelöltek (díszes oldalszegély nem lesz „sidebar”).
+- Heurisztikus layout: soralapú csoportosítás (sorfragmensek → hasábos/teljes szélességű sorok → blokkok),
+  adaptív szóköz-becslés.
+- `paddle` extra: `paddleocr[doc-parser]`; a PaddleOCR-VL motor nem tölti be a pipeline saját
+  layout/orientáció almodelljeit.

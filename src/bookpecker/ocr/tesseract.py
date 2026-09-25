@@ -41,18 +41,56 @@ class TesseractEngine:
         pars: dict[tuple, int] = {}
         for i, word in enumerate(data["text"]):
             word = (word or "").strip()
-            if not word or float(data["conf"][i]) < 0:
+            conf = float(data["conf"][i])
+            if not word or conf < 0:
+                continue
+            if conf < self.cfg.min_word_conf and not any(c.isdigit() for c in word):
                 continue
             key = (data["block_num"][i], data["par_num"][i], data["line_num"][i])
             pkey = key[:2]
             pars.setdefault(pkey, len(pars))
             x, y, w, h = (data[k][i] for k in ("left", "top", "width", "height"))
             ln = lines.setdefault(key, {"words": [], "box": [x, y, x + w, y + h], "par": pars[pkey]})
-            ln["words"].append(word)
+            ln["words"].append((word, conf))
             b = ln["box"]
             ln["box"] = [min(b[0], x), min(b[1], y), max(b[2], x + w), max(b[3], y + h)]
         out = []
         for ln in lines.values():  # tesseract reading order
+            words = strip_edge_junk(ln["words"], self.cfg.edge_junk_conf)
+            if not words or is_junk_line(words):
+                continue
             box = [ln["box"][0] - PAD, ln["box"][1] - PAD, ln["box"][2] - PAD, ln["box"][3] - PAD]
-            out.append(OcrLine(" ".join(ln["words"]), [float(v) for v in box], ln["par"]))
+            out.append(OcrLine(" ".join(words), [float(v) for v in box], ln["par"]))
         return OcrResult(self.name, out)
+
+
+# common one/two letter Hungarian words – not ornament scraps
+HU_SHORT = {"a", "az", "s", "és", "is", "ez", "e", "ha", "le", "be", "ki", "ne", "se", "el", "ő",
+            "ők", "én", "te", "mi", "ti", "ma", "no", "jó", "ő", "fő", "kő", "ló", "tó", "új", "év",
+            "út", "id", "pl", "km", "kp", "tp", "ép", "és", "--", "–", "—", "-"}
+
+SHORT_WORDS = {"a", "s", "e", "é", "ó", "ő", "A", "S", "É", "Ó", "Ő", "—", "–", "-"}
+
+
+def strip_edge_junk(words: list[tuple[str, float]], max_conf: float) -> list[str]:
+    """Drop 1–2 character low-confidence scraps at line ends (ornament edges, gutter shadow)."""
+    def junk(w: str, c: float) -> bool:
+        return len(w) <= 2 and c < max_conf and w not in SHORT_WORDS and not w.isdigit()
+
+    while words and junk(*words[0]):
+        words = words[1:]
+    while words and junk(*words[-1]):
+        words = words[:-1]
+    return [w for w, _ in words]
+
+
+def is_junk_line(words: list[str]) -> bool:
+    """Ornament texture read as letters: mostly 1–2 character scraps, e.g. "d Z H 2 s"."""
+    if len(words) < 3:
+        return False
+    def scrap(w: str) -> bool:
+        core = w.strip(".,;:!?\"'()[]")
+        return len(core) <= 2 and core.lower() not in HU_SHORT
+
+    scraps = sum(1 for w in words if scrap(w))
+    return scraps / len(words) >= 0.6

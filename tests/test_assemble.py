@@ -51,3 +51,10 @@ def test_html_table_to_md():
     assert asm.html_table_to_md(html) == "| Dobás | Eredmény |\n| --- | --- |\n| 1-2 | Ork \\| vezér |"
     spanned = "<table><tr><td colspan='2'>x</td></tr></table>"
     assert asm.html_table_to_md(spanned) == spanned
+
+
+def test_replacements_fix_percent_confusion():
+    fixes = [(r"^(\d{1,3})(?:96|90|06)(?=\s*[-–—])", r"\1%")]
+    assert asm.apply_replacements("2096 — Ismered a mérgeket.", fixes) == "20% — Ismered a mérgeket."
+    assert asm.apply_replacements("10090 — Magas szintű.", fixes) == "100% — Magas szintű."
+    assert asm.apply_replacements("Az 1896 — év", fixes) == "Az 1896 — év"

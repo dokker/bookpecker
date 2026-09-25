@@ -111,7 +111,7 @@ def _join_row_neighbours(frags: list[_Frag]) -> list[_Frag]:
         for i, f in enumerate(frags):
             for g in frags[i + 1:]:
                 gap = g.box.x0 - f.box.x1
-                if 0 <= gap < 0.6 * min(f.box.h, g.box.h) and _same_row(f.box, g.box):
+                if 0 <= gap < 0.8 * min(f.box.h, g.box.h) and _same_row(f.box, g.box):
                     f.box = f.box.union(g.box)
                     frags.remove(g)
                     changed = True
@@ -165,9 +165,11 @@ def _classify(bw: np.ndarray, block: _Block, em: float, cfg: HeuristicCfg) -> st
     hs = comp[:, cv2.CC_STAT_HEIGHT]
     ws = comp[:, cv2.CC_STAT_WIDTH]
     huge = (hs > 3.5 * em) | (ws > 12 * em)
-    if areas.sum() and areas[huge].sum() / areas.sum() > cfg.figure_big_ink:
+    density = areas.sum() / max(1.0, float(crop.size))
+    if areas.sum() and areas[huge].sum() / areas.sum() > cfg.figure_big_ink \
+            and (block.box.h > 6 * em or density > 0.35):  # big thin-stroked letters = title
         return "figure"
-    glyph = (hs >= 4) & ~huge
+    glyph = hs >= 4  # not a figure: big components are just big letters
     if glyph.any():
         med = float(np.median(hs[glyph]))
         if med > cfg.title_ratio * em and len(block.frags) <= 3:

@@ -21,7 +21,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # PaddlePaddle itself (CPU or GPU build) is installed separately, see README.
-paddle = ["paddleocr>=3.3"]
+paddle = ["paddleocr[doc-parser]>=3.3"]
 dev = ["pytest>=8"]
 
 [project.scripts]
