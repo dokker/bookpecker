@@ -1,0 +1,3 @@
+# Project-wide defaults, merged under every books/<slug>/book.yaml.
+# Same keys as book.yaml (except title/pdf/skip_pages/page_overrides). Empty = built-in defaults.
+languages: [hun]

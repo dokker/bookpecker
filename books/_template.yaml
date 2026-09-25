@@ -1,0 +1,34 @@
+# bookpecker book config – every key except `pdf` is optional (defaults in config.py /
+# config/defaults.yaml). Page numbers are 1-based PDF page indices.
+title: "BOOK_TITLE"
+pdf: "PDF_PATH"                 # relative to this folder, the project root, or absolute
+
+first_page_side: right          # side of PDF page 1: right (recto) | left (verso)
+skip_pages: []                  # e.g. ["1-4", 120, "250-"]  (cover, blank pages, index…)
+page_number_offset: 0           # printed page = PDF page + offset (only for <!-- page --> markers)
+
+dpi: 300
+columns: auto                   # auto | 1 | 2 | 3 …
+margins:                        # ignored edges, share of page size; inner = spine side
+  top: 0.05
+  bottom: 0.05
+  inner: 0.04
+  outer: 0.05
+
+layout_engine: doclayout        # doclayout (PP-DocLayout) | heuristic (no model)
+ocr:
+  default: tesseract            # tesseract | paddle_vl
+  # table: paddle_vl            # e.g. VLM only for tables
+languages: [hun]
+heading_levels: flat            # flat: every heading "##" | auto: from glyph size
+
+sidebars:
+  lines: true                   # ruled boxes
+  shading: true                 # tinted boxes
+  placement: inline             # inline | page_end
+
+# drop_kinds: [header, footer, page_number, ornament, figure]
+
+page_overrides: {}
+#  "37-42": {columns: 1}
+#  "88": {layout_engine: heuristic, margins: {top: 0.15}}

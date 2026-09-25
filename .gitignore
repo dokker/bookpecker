@@ -1,0 +1,19 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# Pipeline artifacts
+work/
+out/
+
+# Source scans (copyright + size) – only book.yaml files are versioned
+books/**/*.pdf
+books/**/*.PDF
+
+# Local tessdata override
+tessdata/
