@@ -9,6 +9,7 @@ from html.parser import HTMLParser
 from . import textfix
 from .layout.base import PageLayout
 from .ocr.base import OcrResult
+from .spell import Speller
 
 
 @dataclass
@@ -75,15 +76,20 @@ def _median_height(res: OcrResult) -> float:
     return float(hs[len(hs) // 2]) if hs else 0.0
 
 
-def apply_replacements(text: str, fixes: list[tuple[str, str]]) -> str:
+def apply_replacements(text: str, fixes: list[tuple]) -> str:
+    """Regex fixes `(pattern, repl)`; a `(None, func)` entry rewrites the whole text."""
     for pattern, repl in fixes:
-        text = re.sub(pattern, repl, text, flags=re.M)
+        text = repl(text) if pattern is None else re.sub(pattern, repl, text, flags=re.M)
     return text
 
 
 def page_items(layout: PageLayout, ocr: dict[int, OcrResult], printed: int | None = None,
-               fixes: list[tuple[str, str]] | None = None) -> list[Item]:
+               fixes: list[tuple[str, str]] | None = None, speller: Speller | None = None,
+               fix_diacritics: bool = True, dehyphenate: bool = True) -> list[Item]:
     items = [Item("marker", "", layout.page, printed=printed)]
+    known = speller.known if speller is not None and dehyphenate else None
+    if speller is not None and fix_diacritics:
+        fixes = [*(fixes or []), (None, speller.fix_text)]
     fixes = fixes or []
     for r in layout.kept():
         res = ocr.get(r.id)
@@ -94,26 +100,27 @@ def page_items(layout: PageLayout, ocr: dict[int, OcrResult], printed: int | Non
             if res.markdown:
                 text = html_table_to_md(res.markdown)
             else:  # engine without table support: one row per line
-                text = "  \n".join(textfix.clean(ln.text) for ln in res.lines if ln.text.strip())
+                text = "  \n".join(apply_replacements(textfix.clean(ln.text), fixes)
+                                   for ln in res.lines if ln.text.strip())
             if text:
                 items.append(Item("table", text, layout.page, group))
         elif r.kind == "title":
-            text = apply_replacements(textfix.single_line(res.lines), fixes)
+            text = apply_replacements(textfix.single_line(res.lines, known), fixes)
             if text:
                 items.append(Item("heading", text, layout.page, group, _median_height(res)))
         elif r.kind == "caption":
-            text = apply_replacements(textfix.single_line(res.lines), fixes)
+            text = apply_replacements(textfix.single_line(res.lines, known), fixes)
             if text:
                 items.append(Item("caption", text, layout.page, group))
         else:
-            for para in textfix.paragraphs(res.lines):
+            for para in textfix.paragraphs(res.lines, known):
                 para = apply_replacements(para, fixes)
                 if para:
                     items.append(Item("para", para, layout.page, group))
     return items
 
 
-def merge_continuations(items: list[Item]) -> list[Item]:
+def merge_continuations(items: list[Item], known: textfix.Known | None = None) -> list[Item]:
     """Join paragraphs split by a column or page break.
 
     Page markers, captions, tables and sidebars that sat between the two halves end up after the
@@ -125,7 +132,7 @@ def merge_continuations(items: list[Item]) -> list[Item]:
         if it.type == "para":
             prev = last.get(it.group)
             if prev is not None and textfix.should_continue(prev.text, it.text):
-                prev.text = textfix.join_lines(prev.text, it.text)
+                prev.text = textfix.join_lines(prev.text, it.text, known)
                 continue
             last[it.group] = it
         elif it.type == "heading":

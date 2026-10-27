@@ -15,6 +15,7 @@ class OcrLine:
     text: str
     box: list[float]  # x0, y0, x1, y1 relative to the region crop
     par: int = -1  # engine's own paragraph id, if any
+    conf: float = -1.0  # recognition confidence 0–1; -1 = unknown
 
 
 @dataclass
@@ -53,6 +54,21 @@ def get_engine(name: str, cfg: PageConfig) -> OcrEngine:
             from .paddle_vl import PaddleVLEngine
 
             _ENGINES[key] = PaddleVLEngine(cfg.paddle_vl)
+    elif name == "paddle_ocr":
+        key = (name, cfg.paddle_ocr.model_dump_json())
+        if key not in _ENGINES:
+            from .paddle_ocr import PaddleOcrEngine
+
+            _ENGINES[key] = PaddleOcrEngine(cfg.paddle_ocr)
+    elif name == "ensemble":
+        key = (name, cfg.spell.enabled, cfg.spell.dictionary, cfg.paddle_ocr.model_dump_json(),
+               tuple(cfg.languages), cfg.tesseract.model_dump_json())
+        if key not in _ENGINES:
+            from ..spell import Speller
+            from .ensemble import EnsembleEngine
+
+            known = Speller(cfg.spell.dictionary).known if cfg.spell.enabled else None
+            _ENGINES[key] = EnsembleEngine(get_engine("paddle_ocr", cfg), get_engine("tesseract", cfg), known)
     else:
-        raise ValueError(f"unknown OCR engine {name!r} (tesseract | paddle_vl)")
+        raise ValueError(f"unknown OCR engine {name!r} (ensemble | paddle_ocr | tesseract | paddle_vl)")
     return _ENGINES[key]

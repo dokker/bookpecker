@@ -60,7 +60,8 @@ class TesseractEngine:
             if not words or is_junk_line(words):
                 continue
             box = [ln["box"][0] - PAD, ln["box"][1] - PAD, ln["box"][2] - PAD, ln["box"][3] - PAD]
-            out.append(OcrLine(" ".join(words), [float(v) for v in box], ln["par"]))
+            conf = sum(c for _, c in ln["words"]) / len(ln["words"]) / 100
+            out.append(OcrLine(" ".join(words), [float(v) for v in box], ln["par"], round(conf, 3)))
         return OcrResult(self.name, out)
 
 

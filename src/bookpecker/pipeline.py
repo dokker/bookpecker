@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from pathlib import Path
 from typing import Callable
 
@@ -23,6 +24,7 @@ from .layout.frames import binarize_inv, detect_frames
 from .layout.heuristic import estimate_em
 from .layout.order import order_regions
 from .ocr.base import OcrResult, get_engine
+from .spell import Speller, get_speller
 
 STAGES = ["rasterize", "preprocess", "layout", "ocr"]
 VERSIONS = {"rasterize": 1, "preprocess": 1, "layout": 1, "ocr": 1}
@@ -86,21 +88,24 @@ def build_layout(gray: np.ndarray, page: int, cfg: PageConfig) -> PageLayout:
 
 
 def region_crop(gray: np.ndarray, layout: PageLayout, r, pad_x: float) -> np.ndarray:
-    """Region plus some slack; pictures/ornaments reaching into the slack are painted white.
+    """Region plus some slack; other regions reaching into the slack are painted white.
 
-    `pad_x` (share of page width) is added on the spine side, a few pixels elsewhere.
+    `pad_x` (share of page width) is added on both sides: layout boxes and the margin mask clip
+    tightly set line ends and their hyphens – on the spine side, but on warped scans on the
+    fore-edge side as well.
     """
     h, w = gray.shape
     x0, y0, x1, y1 = r.box.as_int()
-    # layout boxes tend to clip the tightly set lines next to the spine: slack on that side only
-    inner, other, py = int(pad_x * w), 8, 6
-    left, right = (inner, other) if layout.side == "right" else (other, inner)
+    left = right = int(pad_x * w)
+    py = 6
     cx0, cy0, cx1, cy1 = max(0, x0 - left), max(0, y0 - py), min(w, x1 + right), min(h, y1 + py)
     crop = gray[cy0:cy1, cx0:cx1].copy()
     keep = np.zeros(crop.shape, bool)
     keep[max(0, y0 - cy0):y1 - cy0, max(0, x0 - cx0):x1 - cx0] = True
     for o in layout.regions:
-        if o is r or o.kind not in ("figure", "ornament", "header", "footer", "page_number"):
+        # anything else in the slack – a neighbouring column, picture, page number – is not ours;
+        # regions overlapping this one (containers, duplicates) are left alone
+        if o is r or o.box.intersect(r.box).area > 0:
             continue
         a, b, c, d = o.box.as_int()
         m = np.zeros(crop.shape, bool)
@@ -177,7 +182,10 @@ def process_page(book: Book, page: int, force_from: str | None = None,
     if until == "layout":
         return
 
-    ocr_cfg = cfg.model_dump(include={"ocr", "languages", "tesseract", "paddle_vl", "crop_pad_x"})
+    ocr_cfg = cfg.model_dump(include={
+        **dict.fromkeys(["ocr", "languages", "tesseract", "paddle_ocr", "paddle_vl", "crop_pad_x"], True),
+        "spell": {"enabled", "dictionary"},  # the ensemble engine consults the dictionary
+    })
     k_o = _key("ocr", ocr_cfg, k_l)
     if not fresh("ocr", k_o, p.ocr):
         log(f"  p{page:04d} ocr ({cfg.ocr.default})")
@@ -189,12 +197,20 @@ def process_page(book: Book, page: int, force_from: str | None = None,
 
 
 def assemble_book(book: Book, pages: list[int], log: Log = print) -> Path:
-    """Write out/<book>/book.md plus per-page Markdown and JSON for the processed pages."""
+    """Write out/<book>/book.md plus per-page Markdown and JSON for the processed pages.
+
+    Also writes out/<book>/quality.md: pages ranked by share of words unknown to the dictionary
+    and by low-confidence OCR lines – where proofreading is most needed.
+    """
     all_items: list[asm.Item] = []
     page_dir = book.out_dir / "pages"
     page_dir.mkdir(parents=True, exist_ok=True)
     per_page: list[tuple[int, list[asm.Item]]] = []
+    quality: list[dict] = []
+    page_json: dict[int, dict] = {}
+    ocr_by_page: dict[int, dict[int, OcrResult]] = {}
     mode = "flat"
+    speller = None
     for page in pages:
         p = PagePaths(book, page)
         if not (p.layout.exists() and p.ocr.exists()):
@@ -202,26 +218,76 @@ def assemble_book(book: Book, pages: list[int], log: Log = print) -> Path:
             continue
         cfg = book.page_config(page)
         mode = cfg.heading_levels
+        speller = get_speller(cfg.spell)
         layout = PageLayout.from_dict(_load_json(p.layout))
         ocr = {int(k): OcrResult.from_dict(v) for k, v in _load_json(p.ocr).items()}
         fixes = [(f.pattern, f.repl) for f in cfg.replacements]
-        items = asm.page_items(layout, ocr, book.printed_page(page), fixes)
+        items = asm.page_items(layout, ocr, book.printed_page(page), fixes, speller,
+                               cfg.spell.fix_diacritics, cfg.spell.dehyphenate)
         per_page.append((page, items))
         all_items.extend(items)
-        _save_json(page_dir / f"{page:04d}.json", {
+        page_json[page] = {
             "page": page, "side": layout.side,
             "regions": [{**r.to_dict(), "text": _region_text(ocr.get(r.id))} for r in layout.regions],
-        })
+        }
+        ocr_by_page[page] = ocr
 
+    known = speller.known if speller is not None else None
     asm.assign_heading_levels(all_items, mode)
     for page, items in per_page:  # copies: merging mutates paragraph text
-        text = asm.render(asm.merge_continuations([_copy(i) for i in items]))
-        (page_dir / f"{page:04d}.md").write_text(text, encoding="utf-8")
+        merged = _refix(asm.merge_continuations([_copy(i) for i in items], known), speller)
+        (page_dir / f"{page:04d}.md").write_text(asm.render(merged), encoding="utf-8")
+        q = page_quality(page, merged, ocr_by_page[page], speller)
+        quality.append(q)
+        _save_json(page_dir / f"{page:04d}.json", {**page_json[page], "quality": q})
 
-    body = asm.render(asm.merge_continuations(all_items))
+    body = asm.render(_refix(asm.merge_continuations(all_items, known), speller))
     out = book.out_dir / "book.md"
     out.write_text(f"# {book.title}\n\n{body}", encoding="utf-8")
+    (book.out_dir / "quality.md").write_text(quality_report(book.title, quality), encoding="utf-8")
     return out
+
+
+def _refix(items: list[asm.Item], speller: Speller | None) -> list[asm.Item]:
+    """Words rejoined across a column/page break get the diacritic repair too."""
+    if speller is not None:
+        for it in items:
+            if it.type == "para":
+                it.text = speller.fix_text(it.text)
+    return items
+
+
+LOW_CONF = 0.85
+
+
+def page_quality(page: int, items: list[asm.Item], ocr: dict[int, OcrResult],
+                 speller: Speller | None) -> dict:
+    lines = [ln for res in ocr.values() for ln in res.lines]
+    low = [ln.text for ln in lines if 0 <= ln.conf < LOW_CONF]
+    q: dict = {"page": page, "lines": len(lines), "low_conf_lines": len(low)}
+    if speller is not None:
+        text = "\n".join(it.text for it in items if it.type != "marker")
+        n, unknown = speller.unknown_words(text)
+        q |= {"words": n, "unknown": len(unknown), "unknown_ratio": round(len(unknown) / n, 4) if n else 0.0,
+              "unknown_words": sorted(set(unknown))}
+    return q
+
+
+def quality_report(title: str, quality: list[dict]) -> str:
+    """Markdown summary: worst pages first, then the most frequent unknown words."""
+    rows = sorted(quality, key=lambda q: (-q.get("unknown_ratio", 0), -q["low_conf_lines"]))
+    out = [f"# {title} – OCR minőség", "",
+           "Ismeretlen szó: a szótárban nem szereplő (3+ betűs) szavak aránya – OCR-hiba, név vagy "
+           "játékkifejezés. A gyakori neveket/kifejezéseket érdemes a `spell.words` listába felvenni.", "",
+           "| oldal | szavak | ismeretlen | arány | bizonytalan sorok |", "|---:|---:|---:|---:|---:|"]
+    for q in rows:
+        out.append(f"| {q['page']} | {q.get('words', '–')} | {q.get('unknown', '–')} | "
+                   f"{q.get('unknown_ratio', 0):.1%} | {q['low_conf_lines']}/{q['lines']} |")
+    counts = Counter(w for q in quality for w in q.get("unknown_words", []))
+    if counts:
+        out += ["", "## Leggyakoribb ismeretlen szavak (oldalak száma)", "",
+                ", ".join(f"{w} ({n})" for w, n in counts.most_common(80))]
+    return "\n".join(out) + "\n"
 
 
 def _copy(item: asm.Item) -> asm.Item:

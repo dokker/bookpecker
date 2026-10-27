@@ -8,8 +8,11 @@ from __future__ import annotations
 
 import re
 import statistics
+from typing import Callable
 
 from .ocr.base import OcrLine
+
+Known = Callable[[str], bool]  # dictionary lookup, see spell.Speller.known
 
 HYPHENS = ("-", "‐", "­", "¬")
 DASHES = ("–", "—")
@@ -20,6 +23,9 @@ SUSPENDED_NEXT = {"és", "vagy", "s", "illetve", "valamint", "avagy", "meg", "se
 BULLET_RE = re.compile(r"^[•·▪■◆●○‣*]")  # always a new item, even without final punctuation
 # numbered/lettered items and dialogue dashes: new paragraph only after a finished sentence
 ITEM_RE = re.compile(r"^([-–—]\s|\d{1,3}[.)]\s|[a-z][.)]\s)")
+HYPHEN_JUNK = re.compile(r"(?<=[^\W\d_])([-‐¬])[.,:;]+$")
+WORD_TAIL = re.compile(r"[^\W\d_]{2,}$")
+WORD_HEAD = re.compile(r"[^\W\d_]{2,}")
 LIGATURES = {"ﬁ": "fi", "ﬂ": "fl", "ﬀ": "ff", "ﬃ": "ffi", "ﬄ": "ffl"}
 
 
@@ -42,9 +48,16 @@ def is_item(text: str) -> bool:
     return bool(ITEM_RE.match(text.lstrip()))
 
 
-def join_lines(a: str, b: str) -> str:
-    """Join two consecutive text lines, resolving end-of-line hyphenation."""
+def join_lines(a: str, b: str, known: Known | None = None) -> str:
+    """Join two consecutive text lines, resolving end-of-line hyphenation.
+
+    With a dictionary (`known`), a lowercase continuation keeps its hyphen when the joined word
+    is unknown but both halves are words (a hyphenated compound that happens to end the line);
+    and two line-edge fragments that are not both words but form one are joined without a space
+    (the hyphen was lost at the page edge).
+    """
     a, b = a.rstrip(), b.lstrip()
+    a = HYPHEN_JUNK.sub(r"\1", a)  # "tudá-," : gutter speck read after the hyphen
     if not a:
         return b
     if not b:
@@ -54,8 +67,21 @@ def join_lines(a: str, b: str) -> str:
         if first.lower() in SUSPENDED_NEXT:
             return f"{a[:-1]}- {b}"
         if b[0].islower():
+            if known is not None:
+                left = WORD_TAIL.search(a[:-1])
+                right = WORD_HEAD.match(b)
+                if left and right and not known(left.group() + right.group()) \
+                        and known(left.group()) and known(right.group()):
+                    return a[:-1] + "-" + b
             return a[:-1] + b
         return a[:-1] + "-" + b  # real compound hyphen: "Kard-" + "Mágia"
+    if known is not None and b[0].islower():
+        # hyphen lost in the gutter shadow: "jelentke" + "zik" → "jelentkezik"
+        left, right = WORD_TAIL.search(a), WORD_HEAD.match(b)
+        if left and right and left.end() == len(a) \
+                and not (known(left.group()) and known(right.group())) \
+                and known(left.group() + right.group()):
+            return a + b
     return f"{a} {b}"
 
 
@@ -100,8 +126,8 @@ def paragraph_breaks(lines: list[OcrLine]) -> list[bool]:
     return breaks
 
 
-def paragraphs(lines: list[OcrLine]) -> list[str]:
-    lines = [OcrLine(clean(ln.text), ln.box, ln.par) for ln in lines if clean(ln.text)]
+def paragraphs(lines: list[OcrLine], known: Known | None = None) -> list[str]:
+    lines = [OcrLine(clean(ln.text), ln.box, ln.par, ln.conf) for ln in lines if clean(ln.text)]
     if not lines:
         return []
     breaks = paragraph_breaks(lines)
@@ -111,19 +137,19 @@ def paragraphs(lines: list[OcrLine]) -> list[str]:
         if brk and cur:
             out.append(cur)
             cur = ""
-        cur = join_lines(cur, ln.text) if cur else ln.text
+        cur = join_lines(cur, ln.text, known) if cur else ln.text
     if cur:
         out.append(cur)
     return out
 
 
-def single_line(lines: list[OcrLine]) -> str:
+def single_line(lines: list[OcrLine], known: Known | None = None) -> str:
     """Titles/captions: everything on one line."""
     text = ""
     for ln in lines:
         t = clean(ln.text)
         if t:
-            text = join_lines(text, t) if text else t
+            text = join_lines(text, t, known) if text else t
     return text
 
 

@@ -17,9 +17,11 @@ margins:                        # ignored edges, share of page size; inner = spi
 
 layout_engine: doclayout        # doclayout (PP-DocLayout) | heuristic (no model)
 ocr:
-  default: tesseract            # tesseract | paddle_vl
+  default: ensemble             # ensemble (PP-OCRv5 + Tesseract) | paddle_ocr | tesseract | paddle_vl
   # table: paddle_vl            # e.g. VLM only for tables
 languages: [hun]
+spell:                          # Hunspell post-correction + out/codex/quality.md
+  words: [Abryss, Nadysson, sytisi, mentalior, Homonculus, Zorawa, grimoár, Mana]
 heading_levels: flat            # flat: every heading "##" | auto: from glyph size
 
 sidebars:

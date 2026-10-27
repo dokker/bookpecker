@@ -8,6 +8,9 @@ futó OCR-rel.
   tükrözött margómaszk + layout-modell címkék)
 - keretes / színezett hátterű **sidebarok** → Markdown idézetblokk
 - **táblázatok** (VLM motorral Markdown/HTML táblaként)
+- **két OCR motor együtt** (`ensemble`): PP-OCRv5 + Tesseract szavanként összeigazítva, a vitás
+  szavakat a magyar Hunspell-szótár dönti el; szótári ékezetjavítás és **minőségi riport**
+  (`out/<slug>/quality.md`: mely oldalakat érdemes átnézni)
 - képek, illusztrációk: csak felismerjük, hogy ne legyen belőlük szemét-szöveg – nem mentjük ki őket
 - sortörés **csak bekezdéshatáron**; mondat közben soha. Az elválasztott szavak összeforrasztva
   (`var-⏎ázsló` → `varázsló`, de `kis- és nagybetű`, `Kard-Mágia` marad)
@@ -32,6 +35,7 @@ PDF ─ rasterize ─ preprocess ─ layout ─ filter ─ reading order ─ OCR
 | `work/<slug>/debug/NNNN.png` | **overlay a hangoláshoz** |
 | `work/<slug>/ocr/NNNN.json` | OCR eredmény régiónként, sorgeometriával |
 | `out/<slug>/book.md` | a teljes könyv |
+| `out/<slug>/quality.md` | OCR-minőség oldalanként (ismeretlen szavak aránya, bizonytalan sorok) |
 | `out/<slug>/pages/NNNN.md, .json` | oldalanként (a JSON-ban régiók + szöveg) |
 
 A `work/`, `out/` és a PDF-ek nincsenek a repóban.
@@ -41,7 +45,7 @@ A `work/`, `out/` és a PDF-ek nincsenek a repóban.
 Rendszercsomagok (Arch/Manjaro):
 
 ```sh
-sudo pacman -S --needed uv tesseract tesseract-data-hun
+sudo pacman -S --needed uv tesseract tesseract-data-hun hunspell hunspell-hu
 ```
 
 Virtualenv a projektben (Python 3.12 – a PaddlePaddle a legújabb Pythont még nem támogatja):
@@ -52,7 +56,8 @@ source .venv/bin/activate
 uv pip install -e ".[dev]"             # alap: heurisztikus layout + Tesseract
 ```
 
-Opcionális, modell alapú layout (PP-DocLayout) és VLM OCR (PaddleOCR-VL):
+Opcionális, de **ajánlott**: modell alapú layout (PP-DocLayout), PP-OCRv5 (`paddle_ocr`, `ensemble`)
+és VLM OCR (PaddleOCR-VL):
 
 ```sh
 # GPU (CUDA 12.6 build; GTX 1650-en is fut) – vagy CPU: uv pip install paddlepaddle
@@ -105,7 +110,11 @@ Oldalszámok mindig **1-alapú PDF-oldalindexek**.
 | `drop_kinds` | `[header, footer, page_number, ornament, figure]` | eldobott régiótípusok |
 | `sidebars.lines / shading` | `true / true` | keretes és színezett hátterű dobozok keresése |
 | `sidebars.placement` | `inline` | `inline` (a helyén) vagy `page_end` (az oldal szövege után) |
-| `ocr.default` | `tesseract` | OCR motor; típusonként felülírható: `ocr.text`, `ocr.title`, `ocr.table`, `ocr.caption`, `ocr.sidebar` |
+| `ocr.default` | `tesseract` | OCR motor (`ensemble`, `paddle_ocr`, `tesseract`, `paddle_vl`); típusonként felülírható: `ocr.text`, `ocr.title`, `ocr.table`, `ocr.caption`, `ocr.sidebar` |
+| `paddle_ocr.device` | paddle alap | `gpu:0` / `cpu`; `min_score: 0.5` alatti sorok kiesnek |
+| `spell.enabled` | `true` | Hunspell-utófeldolgozás és minőségi riport (`hunspell` + `hunspell-hu` kell) |
+| `spell.words` | `[]` | nevek, játékkifejezések; ragozott alakjaik is ismertnek számítanak (`mentalior` → `mentaliorban`) |
+| `spell.fix_diacritics` / `spell.dehyphenate` | `true` / `true` | ékezetjavítás; szótárral ellenőrzött elválasztás-összevonás |
 | `languages` | `[hun]` | Tesseract nyelvek |
 | `heading_levels` | `flat` | `flat`: minden cím `##`; `auto`: betűméret-klaszterek (`#`–`###`), bizonytalan esetben `flat` |
 | `edge_touch` | `0.01` | a lap szélét (ennyi arányon belül) érintő régiók eldobása – a szomszéd oldalról belógó szöveg, szegélyek |
@@ -125,22 +134,51 @@ Oldalszámok mindig **1-alapú PDF-oldalindexek**.
 2. Állítsd a `margins` értékeket úgy, hogy az ornamentumok és oldalszámok kívül essenek, de a szöveg ne.
 3. Ha egyes oldalak eltérnek (pl. egyhasábos fejezetnyitó), használd a `page_overrides`-t.
 4. `bookpecker run <slug> -p …` → `out/<slug>/pages/*.md` ellenőrzése.
+5. `out/<slug>/quality.md`: a legrosszabb oldalak elöl; a gyakori ismeretlen neveket/kifejezéseket
+   vedd fel a `spell.words` listába (utána elég a `bookpecker assemble <slug>`).
 
 ## OCR motorok
 
 | Motor | Erősség | Megjegyzés |
 |---|---|---|
-| `tesseract` | gyors, CPU, jó magyar modell, sorgeometriát ad (bekezdés-felismeréshez) | táblázatot csak soronként |
-| `paddle_vl` | PaddleOCR-VL (0.9B VLM): **táblázat → Markdown/HTML**, sorvégi elválasztást maga összevonja | **kísérleti**; nincs sorgeometria, a bekezdéseket a modell üres sorai és az írásjelek alapján bontjuk |
+| `ensemble` | **a legmegbízhatóbb**: PP-OCRv5 szöveg + Tesseract javítások | ~25–35 s/oldal (GTX 1650) |
+| `paddle_ocr` | PP-OCRv5 (sordetektálás + latin felismerő), GPU-n gyors; a gerinc melletti összenyomott sorokat és a sorvégi elválasztást jól olvassa | nincs en dash (–) a karakterkészletében; ű/ő helyett néha ú/ó (a `spell` lépés javítja) |
+| `tesseract` | gyors, CPU, jó magyar modell, sorgeometriát ad | a gerinc felé összenyomódó sorokon gyenge („fel2”, „Veszé: lyérzet”); táblázatot csak soronként |
+| `paddle_vl` | PaddleOCR-VL (0.9B VLM): **táblázat → Markdown/HTML** | **kísérleti**; nincs sorgeometria |
 
-Mért tapasztalat (Codex alapkönyv, GTX 1650 4 GB):
+### Az `ensemble` működése
+
+A PP-OCRv5 adja a szöveget és a sorgeometriát; a Tesseract ugyanannak a régiónak ugyanarra a
+vizuális sorára eső szavait ékezet- és írásjel-független kulcsok alapján összeigazítjuk vele. A
+Tesseract **csak javít, új szót nem tesz hozzá**:
+
+- gondolatjel, amelyet csak a Tesseract látott (`fejfájást – gyengébb`, `8-9`), sorvégi kötőjel,
+  amelyet a PP-OCR pontnak olvasott vagy elvesztett;
+- ugyanaz a szó más ékezettel: a szótárban szereplő alak nyer (`túnik` → `tűnik`), a magyarban nem
+  létező betű (`ý`, `ā`) helyett a Tesseracté;
+- egybeolvadt szavak (`nagyhatásúellenmérgek`) szétválasztása, ha a Tesseract betűre ugyanazt
+  olvasta szóközzel;
+- félreolvasott szó (`lőfegóver`) helyett a hasonló, szótárban szereplő Tesseract-szó; ha a
+  PP-OCR maga is bizonytalan volt a sorban (konfidencia < 0,85), lazább hasonlósági küszöbbel;
+- `l`/`1`, `O`/`0` tévesztés, ha a Tesseract számjegyet olvasott.
+
+Utána a `spell` lépés: ékezetjavítás csak akkor, ha legfeljebb két magánhangzó cseréje a saját
+csoportján belül (a/á, e/é, i/í, o/ó/ö/ő, u/ú/ü/ű) **pontosan egy** szótári szót ad; elválasztás
+összevonásakor a szótár dönt (`kard-` + `mágia` összetétel marad; a lap szélén elveszett kötőjel
+esetén `jelentke` + `zik` → `jelentkezik`).
+
+Mért eredmény (Codex, 6 vegyes oldal: 20–21, 50–51, 120–121; szótárban nem szereplő szavak,
+könyvspecifikus szólista nélkül): Tesseract **97**, ensemble **73**; a riport „bizonytalan sor”
+oszlopa az ensemble-nél szinte mindenhol 0.
+
+Tapasztalat (GTX 1650 4 GB):
 
 - A PaddleOCR-VL bf16 súlyokkal jön; a Turing GPU nem tud bf16-ot, fp32-ben pedig nem fér el 4 GB-ban
-  (fp16 kényszerítéssel sem) → csak **CPU-n** fut, ~20–40 s régiónként (~15 perc/oldal).
-  Magyar ékezetekben gyengébb a Tesseractnál („mozgatörugókkal”), a `%` jelet viszont jól olvassa.
-- Ezért a javasolt beállítás: `ocr.default: tesseract`; VLM legfeljebb táblákra (`ocr: {table: paddle_vl}`,
-  `paddle_vl: {device: cpu}`).
-- A PP-DocLayout layout-modell GPU-n ~1–2 s/oldal, a teljes pipeline Tesseracttal ~15 s/oldal.
+  → csak **CPU-n** fut (~15 perc/oldal), ezért legfeljebb táblákra javasolt
+  (`ocr: {table: paddle_vl}`, `paddle_vl: {device: cpu}`).
+- A PP-DocLayout layout-modell GPU-n ~1–2 s/oldal; a PP-OCRv5 modelleket a PaddleOCR első
+  használatkor tölti le (~/.paddlex). `PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True` kihagyja az
+  indításkori hálózati ellenőrzést.
 
 ## Fejlesztés
 
@@ -150,6 +188,7 @@ pytest
 ```
 
 A tesztek (config-feloldás, paritás/margótükrözés, olvasási sorrend, bekezdés- és elválasztáskezelés,
-Markdown összeállítás, szintetikus oldal heurisztikus layouttal) nem igényelnek modellt vagy Tesseractot.
+Markdown összeállítás, ensemble-összeigazítás, szintetikus oldal heurisztikus layouttal) nem igényelnek
+modellt vagy Tesseractot; a Hunspell-tesztek kimaradnak, ha nincs telepítve.
 
 Változások: [CHANGELOG.md](CHANGELOG.md).

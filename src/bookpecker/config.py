@@ -82,6 +82,24 @@ class TesseractCfg(_Model):
     extra: str = ""
 
 
+class PaddleOcrCfg(_Model):
+    det_model: str = "PP-OCRv5_server_det"
+    rec_model: str = "latin_PP-OCRv5_mobile_rec"  # covers Hungarian diacritics
+    device: str | None = None  # e.g. "cpu", "gpu:0"; None = paddle default
+    min_score: float = 0.5  # recognised lines below this confidence are dropped (ornament noise)
+    batch_size: int = 16
+
+
+class SpellCfg(_Model):
+    """Hunspell-based post-correction and quality metrics (needs the `hunspell` CLI + dictionary)."""
+
+    enabled: bool = True
+    dictionary: str = "hu_HU"
+    fix_diacritics: bool = True  # ú→ű, ó→ő, … only when the dictionary confirms exactly one form
+    dehyphenate: bool = True  # keep "a-b" when "ab" is unknown but both halves are words
+    words: list[str] = Field(default_factory=list)  # book-specific words (names, game terms)
+
+
 class PaddleVLCfg(_Model):
     device: str | None = None
     options: dict[str, Any] = Field(default_factory=dict)  # passed to PaddleOCRVL(...)
@@ -118,7 +136,9 @@ class PageConfig(_Model):
     languages: list[str] = Field(default_factory=lambda: ["hun"])
     ocr: OcrCfg = Field(default_factory=OcrCfg)
     tesseract: TesseractCfg = Field(default_factory=TesseractCfg)
+    paddle_ocr: PaddleOcrCfg = Field(default_factory=PaddleOcrCfg)
     paddle_vl: PaddleVLCfg = Field(default_factory=PaddleVLCfg)
+    spell: SpellCfg = Field(default_factory=SpellCfg)
     heading_levels: Literal["flat", "auto"] = "flat"
     replacements: list[Replacement] = Field(default_factory=list)
 

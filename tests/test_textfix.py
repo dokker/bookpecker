@@ -80,3 +80,16 @@ def test_tesseract_junk_filters():
     assert not is_junk_line(["a", "kard", "és", "a", "pajzs"])
     assert strip_edge_junk([("í", 60), ("30%", 13), ("kard", 95), ("[1", 40)], 70) == ["30%", "kard"]
     assert strip_edge_junk([("a", 40), ("kard", 95)], 70) == ["a", "kard"]
+
+
+def test_punctuation_after_line_end_hyphen_is_noise():
+    assert join_lines("féltett tudá-,", "sukat.)") == "féltett tudásukat.)"
+    assert join_lines("vége.", "Új") == "vége. Új"
+
+
+def test_lost_hyphen_rejoined_by_dictionary():
+    words = {"jelentkezik", "itt", "a", "kard", "mágia"}
+    known = words.__contains__
+    assert join_lines("Itt jelentke", "zik a", known) == "Itt jelentkezik a"
+    assert join_lines("a kard", "mágia", known) == "a kard mágia"  # both words: keep the space
+    assert join_lines("Itt jelentke", "zik a") == "Itt jelentke zik a"  # no dictionary

@@ -30,7 +30,27 @@ A formátum a [Keep a Changelog](https://keepachangelog.com/hu/1.1.0/) ajánlás
 - Tesseract zajszűrés: alacsony konfidenciájú szavak, sorvégi töredékek, ornamentumból olvasott „szemét sorok”.
 - Egymásba ágyazott duplikált layout-régiók (pl. kétsoros cím háromszor) kiszűrése.
 
+- `paddle_ocr` OCR motor: PP-OCRv5 sordetektálás + latin felismerő (GPU-n ~1–2 s/régió),
+  sorgeometriával és sorkonfidenciával; a gerinc melletti összenyomott sorokat és a sorvégi
+  elválasztójeleket sokkal jobban olvassa, mint a Tesseract.
+- `ensemble` OCR motor: PP-OCRv5 szöveg + Tesseract szavanként összeigazítva; a Tesseract csak
+  javít (gondolatjel, amit a PP-OCR karakterkészlete nem ismer; ékezet és egybeolvadt szavak
+  szótári döntéssel), új szót sosem ad hozzá.
+- Hunspell-alapú utófeldolgozás (`spell`): csak egyértelmű magánhangzó-tévesztést javít
+  (ú/ű, ó/ő…, legfeljebb 2 betű, pontosan egy szótári jelölt); szótárral ellenőrzött
+  elválasztás-összevonás; könyvspecifikus szólista (`spell.words`).
+- Minőségi riport: `out/<slug>/quality.md` (oldalak az ismeretlen szavak aránya és a bizonytalan
+  sorok szerint, leggyakoribb ismeretlen szavak) és `quality` mező az oldalankénti JSON-ban.
+
 ### Changed
+- OCR-kivágás: a `crop_pad_x` ráhagyás mindkét oldalra kerül (vetemedett szkenneken a külső
+  margónál is levágódott a sorvégi kötőjel); a ráhagyásba lógó *minden* más régió (szomszéd hasáb,
+  kép, oldalszám) kifehérítve.
+- Sorösszevonás: a kötőjel utáni kósza írásjel eldobva (`tudá-,`); szótárral a lap szélén elveszett
+  kötőjel pótolva (`jelentke` + `zik` → `jelentkezik`).
+- Codex: `ocr.default: ensemble`, könyvspecifikus `spell.words`.
+- Függőség: `opencv-python-headless` helyett `opencv-contrib-python` – a PaddleX ezt rögzíti, és a két
+  OpenCV-csomag egymás `cv2/` fájljait írta felül.
 - A sidebar-keretjelöltek közül kiesnek a képekre/ornamentumokra eső és a tartalomdoboz szélét érintő
   jelöltek (díszes oldalszegély nem lesz „sidebar”).
 - Heurisztikus layout: soralapú csoportosítás (sorfragmensek → hasábos/teljes szélességű sorok → blokkok),

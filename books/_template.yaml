@@ -17,9 +17,12 @@ margins:                        # ignored edges, share of page size; inner = spi
 
 layout_engine: doclayout        # doclayout (PP-DocLayout) | heuristic (no model)
 ocr:
-  default: tesseract            # tesseract | paddle_vl
+  default: tesseract            # ensemble (PP-OCRv5 + Tesseract, best) | paddle_ocr | tesseract | paddle_vl
   # table: paddle_vl            # e.g. VLM only for tables
 languages: [hun]
+# spell:                        # Hunspell post-correction + out/<slug>/quality.md
+#   enabled: true
+#   words: []                   # names, game terms (inflected forms are accepted too)
 heading_levels: flat            # flat: every heading "##" | auto: from glyph size
 
 sidebars:
