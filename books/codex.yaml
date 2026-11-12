@@ -4,7 +4,7 @@ title: "Codex"
 pdf: "/home/docker/Dropbox/books/codex/Codex alapkönyv.pdf"                 # relative to this folder, the project root, or absolute
 
 first_page_side: right          # side of PDF page 1: right (recto) | left (verso)
-skip_pages: []                  # e.g. ["1-4", 120, "250-"]  (cover, blank pages, index…)
+skip_pages: ["1-9", 259, "262-264"]   # cover, foreword, intro (A Szerepjátékról…), TOC, char sheet, map
 page_number_offset: 4           # printed page = PDF page + offset (only for <!-- page --> markers)
 
 dpi: 300

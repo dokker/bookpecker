@@ -5,6 +5,10 @@ A formátum a [Keep a Changelog](https://keepachangelog.com/hu/1.1.0/) ajánlás
 
 ## [Unreleased]
 
+### Changed
+- `books/codex.yaml`: a teljes könyv feldolgozásához kihagyva a borító, előszó, a „A Szerepjátékról…”
+  bevezető (PDF 1–9), a tartalomjegyzék (259) és a karakterlap + térkép (262–264).
+
 ### Added
 - Projektváz: `pyproject.toml`, `bookpecker` CLI (`run`, `layout`, `assemble`, `info`, `new-book`).
 - Könyvenkénti konfiguráció (`books/<slug>/book.yaml`) projekt szintű alapértékekkel és
