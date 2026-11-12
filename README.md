@@ -127,6 +127,7 @@ Oldalszámok mindig **1-alapú PDF-oldalindexek**.
 | `drop_kinds` | `[header, footer, page_number, ornament, figure]` | eldobott régiótípusok |
 | `sidebars.lines / shading` | `true / true` | keretes és színezett hátterű dobozok keresése |
 | `sidebars.placement` | `inline` | `inline` (a helyén) vagy `page_end` (az oldal szövege után) |
+| `margin_notes.enabled` | `false` | széljegyzetek: a fő szövegtömb mellett álló keskeny (`max_width`, a tartalom szélességének 30%-a alatti) szövegblokkok egy idézetblokkba, alapból az oldal végére (`placement`) |
 | `ocr.default` | `tesseract` | OCR motor (`ensemble`, `paddle_ocr`, `tesseract`, `paddle_vl`); típusonként felülírható: `ocr.text`, `ocr.title`, `ocr.table`, `ocr.caption`, `ocr.sidebar` |
 | `paddle_ocr.device` | paddle alap | `gpu:0` / `cpu`; `min_score: 0.5` alatti sorok kiesnek |
 | `spell.enabled` | `true` | Hunspell-utófeldolgozás és minőségi riport (`hunspell` + `hunspell-hu` kell) |

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..config import Margins, PageConfig
+from ..config import MarginNotesCfg, Margins, PageConfig
 from .base import Box, Region, merge_overlapping
 
 
@@ -99,3 +99,26 @@ def assign_groups(regions: list[Region], frames: list[Box]) -> list[Box]:
             if r.group is None:
                 r.group = gid
     return used
+
+
+NOTE_KINDS = ("text", "sidebar")
+MAIN_KINDS = ("text", "title", "sidebar", "caption", "table")
+
+
+def find_margin_notes(regions: list[Region], content: Box, cfg: MarginNotesCfg) -> list[list[Region]]:
+    """Narrow text blocks entirely left or right of the main text block: [left notes, right notes].
+
+    The main block spans the kept regions wider than `max_width` of the content box; a note must
+    lie outside its x range (give or take `tolerance`). Titles never count as notes.
+    """
+    cw = content.w
+    kept = [r for r in regions if r.dropped is None]
+    main = [r for r in kept if r.kind in MAIN_KINDS and r.box.w > cfg.max_width * cw]
+    if not main:
+        return []
+    left, right = min(r.box.x0 for r in main), max(r.box.x1 for r in main)
+    tol = cfg.tolerance * cw
+    narrow = [r for r in kept if r.kind in NOTE_KINDS and r.box.w <= cfg.max_width * cw]
+    sides = [[r for r in narrow if r.box.x1 <= left + tol],
+             [r for r in narrow if r.box.x0 >= right - tol]]
+    return [sorted(side, key=lambda r: r.box.y0) for side in sides if side]

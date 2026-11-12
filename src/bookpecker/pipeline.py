@@ -20,7 +20,7 @@ from .config import Book, OcrCfg, PageConfig
 from .debug import overlay
 from .imaging import preprocess, rasterize, read_gray, write_png
 from .layout.base import PageLayout
-from .layout.filters import assign_groups, content_box, filter_regions
+from .layout.filters import assign_groups, content_box, filter_regions, find_margin_notes
 from .layout.frames import binarize_inv, detect_frames
 from .layout.heuristic import estimate_em
 from .layout.order import order_regions
@@ -84,7 +84,24 @@ def build_layout(gray: np.ndarray, page: int, cfg: PageConfig) -> PageLayout:
         if r.dropped is None and r.kind == "sidebar" and r.group is None:
             r.group = len(frames)
             frames.append(r.box)
-    order_regions(regions, frames, content, cfg.columns, cfg.full_width_ratio, cfg.sidebars.placement)
+    tail: set[int] = set()
+    if cfg.margin_notes.enabled:
+        for notes in find_margin_notes(regions, content, cfg.margin_notes):
+            framed = {r.group for r in notes if r.group is not None}
+            gid = len(frames)
+            box = notes[0].box
+            for r in notes[1:]:
+                box = box.union(r.box)
+            frames.append(box)
+            for r in notes:  # a note box may also be shaded: the whole column is one group
+                r.group = gid
+            for r in regions:
+                if r.group in framed:
+                    r.group = gid
+            if cfg.margin_notes.placement == "page_end":
+                tail.add(gid)
+    order_regions(regions, frames, content, cfg.columns, cfg.full_width_ratio, cfg.sidebars.placement,
+                  tail)
     return PageLayout(page, cfg.side, w, h, content, regions, frames)
 
 
@@ -210,7 +227,9 @@ def process_page(book: Book, page: int, force_from: str | None = None,
 
     layout_cfg = cfg.model_dump(include={
         "side", "margins", "columns", "full_width_ratio", "layout_engine", "heuristic", "doclayout",
-        "sidebars", "drop_kinds", "keep_inside_ratio", "edge_touch", "min_region_area", "clip_to_content"})
+        "sidebars", "margin_notes", "drop_kinds", "keep_inside_ratio", "edge_touch", "min_region_area", "clip_to_content"})
+    if not cfg.margin_notes.enabled:
+        layout_cfg.pop("margin_notes")  # keeps the cache keys of books without the feature
     if layout_cfg["layout_engine"] == "heuristic":
         layout_cfg.pop("doclayout")
     else:

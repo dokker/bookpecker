@@ -6,6 +6,12 @@ A formátum a [Keep a Changelog](https://keepachangelog.com/hu/1.1.0/) ajánlás
 ## [Unreleased]
 
 ### Added
+- `margin_notes` layout-opció (alapból ki): a fő szövegtömbtől oldalra eső keskeny szövegblokkok
+  (külső margós széljegyzetek) egy sidebar-csoportba kerülnek, alapból az oldal végére – nem
+  keverednek a főszöveg bekezdései közé. Kikapcsolva a layout cache-kulcs változatlan.
+- `books/grimoire.yaml`: Grimoire – A mágia könyve (108 DPI a 72 pt/px oldalképekhez, szűk margó +
+  `edge_touch` a szabálytalanul vágott szkennekhez, széljegyzetek, borító/tartalomjegyzék/karakterlap
+  kihagyva).
 - Párhuzamos pipeline (`run`/`layout`, `-j/--workers`, alap: CPU-szám − 2): előfeldolgozás külön
   folyamatokban előre, Tesseract szálkészletben a GPU-s PP-OCR-rel egy időben, összefésülés és mentés
   külön szálon. A kimenet bájtra azonos a sorossal; 20 oldalon 303 s → 125 s.

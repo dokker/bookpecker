@@ -1,0 +1,38 @@
+# bookpecker book config – every key except `pdf` is optional (defaults in config.py /
+# config/defaults.yaml). Page numbers are 1-based PDF page indices.
+title: "Grimoire – A mágia könyve"
+pdf: "/mnt/DL/Grimoire.pdf"                 # relative to this folder, the project root, or absolute
+
+first_page_side: right          # side of PDF page 1: right (recto) | left (verso)
+skip_pages: ["1-4", "348-351"]  # cover, title art, TOC; character sheets, back cover
+page_number_offset: -1          # printed page = PDF page + offset (only for <!-- page --> markers)
+
+dpi: 108                        # page images are ~200 dpi at 72 pt/px: 1.5× ≈ the Codex 300 dpi scale
+columns: auto                   # auto | 1 | 2 | 3 …
+margins:                        # ignored edges, share of page size; inner = spine side
+  top: 0.03                     # scans are not cropped evenly: keep the mask small and let
+  bottom: 0.03                  # edge_touch drop the facing page and the scanner border
+  inner: 0.02
+  outer: 0.02
+margin_notes:                   # italic commentary in a narrow outer column → quote at page end
+  enabled: true
+
+layout_engine: doclayout        # doclayout (PP-DocLayout) | heuristic (no model)
+ocr:
+  default: ensemble             # ensemble (PP-OCRv5 + Tesseract, best) | paddle_ocr | tesseract | paddle_vl
+  # table: paddle_vl            # e.g. VLM only for tables
+languages: [hun]
+spell:                          # Hunspell post-correction + out/<slug>/quality.md
+  words: [Abryss, Nadysson, sytisi, Zorawa, grimoár, Mana]                   # names, game terms (inflected forms are accepted too)
+heading_levels: flat            # flat: every heading "##" | auto: from glyph size
+
+sidebars:
+  lines: true                   # ruled boxes
+  shading: true                 # tinted boxes
+  placement: inline             # inline | page_end
+
+# drop_kinds: [header, footer, page_number, ornament, figure]
+
+page_overrides: {}
+#  "37-42": {columns: 1}
+#  "88": {layout_engine: heuristic, margins: {top: 0.15}}

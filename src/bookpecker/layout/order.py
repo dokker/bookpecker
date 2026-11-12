@@ -122,6 +122,7 @@ def order_regions(
     columns: int | str,
     full_width_ratio: float,
     sidebar_placement: str = "inline",
+    tail_groups: frozenset[int] | set[int] = frozenset(),
 ) -> list[Region]:
     """Assign `.order` to kept regions (dropped ones get None). Returns kept regions in order."""
     kept = [r for r in regions if r.dropped is None]
@@ -147,6 +148,11 @@ def order_regions(
     if sidebar_placement == "page_end":
         ordered_units = [u for u in ordered_units if u.group is None] + [
             u for u in ordered_units if u.group is not None
+        ]
+
+    if tail_groups:  # e.g. margin notes: after everything else on the page
+        ordered_units = [u for u in ordered_units if u.group not in tail_groups] + [
+            u for u in ordered_units if u.group in tail_groups
         ]
 
     result: list[Region] = []

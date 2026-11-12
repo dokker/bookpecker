@@ -112,6 +112,15 @@ class Replacement(_Model):
     repl: str
 
 
+class MarginNotesCfg(_Model):
+    """Commentary set in a narrow column beside the main text block (outer-margin notes)."""
+
+    enabled: bool = False
+    max_width: float = 0.3  # a note is at most this share of the content width
+    tolerance: float = 0.02  # it may reach this far into the main block's x range (share of content width)
+    placement: Literal["inline", "page_end"] = "page_end"
+
+
 class PageConfig(_Model):
     """Everything that may differ page by page (via page_overrides)."""
 
@@ -125,6 +134,7 @@ class PageConfig(_Model):
     heuristic: HeuristicCfg = Field(default_factory=HeuristicCfg)
     doclayout: DocLayoutCfg = Field(default_factory=DocLayoutCfg)
     sidebars: SidebarCfg = Field(default_factory=SidebarCfg)
+    margin_notes: MarginNotesCfg = Field(default_factory=MarginNotesCfg)
     drop_kinds: list[RegionKind] = Field(
         default_factory=lambda: ["header", "footer", "page_number", "ornament", "figure"]
     )

@@ -79,3 +79,25 @@ def test_dedupe_container_and_duplicate():
     dedupe([whole, line1, line2, dup_outer, dup_inner])
     assert whole.dropped == "container" and line1.dropped is None and line2.dropped is None
     assert dup_inner.dropped == "duplicate" and dup_outer.dropped is None
+
+
+def test_margin_notes_found_beside_main_block():
+    from bookpecker.config import MarginNotesCfg
+    from bookpecker.layout.filters import find_margin_notes
+
+    content = Box(0, 0, 1000, 1400)
+    regs = [
+        Region(Box(300, 100, 950, 400), "text", source="main1"),
+        Region(Box(300, 420, 950, 900), "text", source="main2"),
+        Region(Box(20, 150, 260, 500), "text", source="note1"),
+        Region(Box(20, 600, 260, 700), "text", source="note2"),
+        Region(Box(20, 50, 260, 90), "title", source="title"),  # a heading is never a note
+        Region(Box(300, 920, 600, 1000), "text", source="narrow-in-main"),
+    ]
+    notes = find_margin_notes(regs, content, MarginNotesCfg(enabled=True))
+    assert [[r.source for r in side] for side in notes] == [["note1", "note2"]]
+    for r in notes[0]:
+        r.group = 0
+    frames = [Box(20, 150, 260, 700)]
+    out = [r.source for r in order_regions(regs, frames, content, "auto", 0.6, "inline", {0})]
+    assert out[-2:] == ["note1", "note2"]
