@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter
+from concurrent.futures import Executor, Future
 from pathlib import Path
 from typing import Callable
 
@@ -115,20 +116,64 @@ def region_crop(gray: np.ndarray, layout: PageLayout, r, pad_x: float) -> np.nda
 
 
 def run_ocr(gray: np.ndarray, layout: PageLayout, cfg: PageConfig) -> dict[int, OcrResult]:
-    results: dict[int, OcrResult] = {}
+    return start_ocr(gray, layout, cfg)()
+
+
+def start_ocr(gray: np.ndarray, layout: PageLayout, cfg: PageConfig,
+              pool: Executor | None = None) -> Callable[[], dict[int, OcrResult]]:
+    """OCR every text region; returns a callable that yields the results.
+
+    With a thread `pool`, CPU-only work (Tesseract, also the ensemble's second engine) is
+    submitted first so it runs while this thread drives the GPU engines; the returned callable
+    then waits for it and merges – it may be called from another thread, so the next page's
+    GPU work can start meanwhile. Without a pool everything runs right here.
+    """
+    jobs = []
     for r in layout.kept():
         if r.kind not in OCR_KINDS:
             continue
         crop = region_crop(gray, layout, r, cfg.crop_pad_x)
         if crop.size == 0:
             continue
-        engine = get_engine(cfg.ocr.engine_for(r.kind), cfg)
-        results[r.id] = engine.recognize(crop, r.kind)
-    return results
+        jobs.append((r.id, get_engine(cfg.ocr.engine_for(r.kind), cfg), crop, r.kind))
+    background: dict[int, Future] = {}
+    if pool is not None:
+        for rid, engine, crop, kind in jobs:
+            if hasattr(engine, "merge"):  # ensemble: the secondary engine is Tesseract
+                if getattr(engine.secondary, "cpu_only", False):
+                    background[rid] = pool.submit(engine.secondary.recognize, crop, kind)
+            elif getattr(engine, "cpu_only", False):
+                background[rid] = pool.submit(engine.recognize, crop, kind)
+    foreground: dict[int, OcrResult] = {}
+    for rid, engine, crop, kind in jobs:
+        if rid not in background:
+            foreground[rid] = engine.recognize(crop, kind)
+        elif hasattr(engine, "merge"):
+            foreground[rid] = engine.primary.recognize(crop, kind)
+
+    def finish() -> dict[int, OcrResult]:
+        results: dict[int, OcrResult] = {}
+        for rid, engine, _, _ in jobs:
+            if rid not in background:
+                results[rid] = foreground[rid]
+            elif hasattr(engine, "merge"):
+                results[rid] = engine.merge(foreground[rid], background[rid].result())
+            else:
+                results[rid] = background[rid].result()
+        return results
+
+    return finish
 
 
 def process_page(book: Book, page: int, force_from: str | None = None,
-                 ocr_engine: str | None = None, until: str = "ocr", log: Log = print) -> None:
+                 ocr_engine: str | None = None, until: str = "ocr", log: Log = print,
+                 pool: Executor | None = None) -> Callable[[], None] | None:
+    """Bring one page's stages up to date (up to `until`).
+
+    With a thread `pool` for CPU-only OCR work, the OCR stage is only started: the returned
+    callable waits for it and writes the result (run it on any single thread). Otherwise – and
+    whenever OCR was cached or not requested – everything is done on return and None is returned.
+    """
     cfg = book.page_config(page)
     if ocr_engine:
         cfg.ocr = OcrCfg(default=ocr_engine)
@@ -191,9 +236,18 @@ def process_page(book: Book, page: int, force_from: str | None = None,
         log(f"  p{page:04d} ocr ({cfg.ocr.default})")
         gray = gray if gray is not None else read_gray(p.prep)
         layout = PageLayout.from_dict(_load_json(p.layout))
-        results = run_ocr(gray, layout, cfg)
-        _save_json(p.ocr, {str(k): v.to_dict() for k, v in results.items()})
-        done("ocr", k_o)
+        finish = start_ocr(gray, layout, cfg, pool)
+
+        def complete() -> None:
+            results = finish()
+            _save_json(p.ocr, {str(k): v.to_dict() for k, v in results.items()})
+            done("ocr", k_o)
+
+        if pool is None:
+            complete()
+        else:
+            return complete
+    return None
 
 
 def assemble_book(book: Book, pages: list[int], log: Log = print) -> Path:

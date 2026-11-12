@@ -182,6 +182,8 @@ class EnsembleEngine:
         self.primary, self.secondary, self.known = primary, secondary, known
 
     def recognize(self, image: np.ndarray, kind: str) -> OcrResult:
-        p = self.primary.recognize(image, kind)
-        s = self.secondary.recognize(image, kind)
+        return self.merge(self.primary.recognize(image, kind), self.secondary.recognize(image, kind))
+
+    def merge(self, p: OcrResult, s: OcrResult) -> OcrResult:
+        """Combine the two engines' results (the parallel pipeline runs them separately)."""
         return OcrResult(self.name, merge_lines(p.lines, s.lines, self.known))

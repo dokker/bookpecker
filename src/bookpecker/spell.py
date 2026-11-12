@@ -1,14 +1,16 @@
 """Hunspell-backed dictionary checks: diacritic repair, dehyphenation guard, quality metrics.
 
-Talks to one long-running `hunspell -a` process (ispell pipe protocol) per dictionary; answers
-are cached. OCR engines confuse the Hungarian long/short and umlaut vowels (PP-OCR reads ű/ő as
-ú/ó, Tesseract sometimes drops accents), so an unknown word is replaced only when changing at
+Looks words up in libhunspell directly (falls back to a `hunspell -a` pipe); answers are cached.
+OCR engines confuse the Hungarian long/short and umlaut vowels (PP-OCR reads ű/ő as ú/ó, Tesseract sometimes drops accents), so an unknown word is replaced only when changing at
 most two vowels within their confusion class yields exactly one dictionary word.
 """
 
 from __future__ import annotations
 
+import ctypes
+import ctypes.util
 import itertools
+import os
 import re
 import shutil
 import subprocess
@@ -32,20 +34,7 @@ MAX_SUFFIX = 6  # letters a book-specific word may be inflected with
 
 class Speller:
     def __init__(self, dictionary: str = "hu_HU", words: Iterable[str] = ()):
-        exe = shutil.which("hunspell")
-        if exe is None:
-            raise RuntimeError("spell step needs the hunspell CLI and dictionary "
-                               "(Arch/Manjaro: sudo pacman -S hunspell hunspell-hu), "
-                               "or set spell: {enabled: false}")
-        self._proc = subprocess.Popen(
-            [exe, "-a", "-i", "UTF-8", "-d", dictionary],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, encoding="utf-8", bufsize=1,
-        )
-        banner = self._proc.stdout.readline()
-        if not banner.startswith("@"):
-            err = self._proc.stderr.read() if self._proc.poll() is not None else banner
-            raise RuntimeError(f"hunspell -d {dictionary} failed: {err.strip()}")
+        self._check = _LibHunspell.open(dictionary) or _PipeHunspell(dictionary)
         self._cache: dict[str, bool] = {}
         self.extra = {w.lower() for w in words}
 
@@ -54,13 +43,7 @@ class Speller:
             return True
         hit = self._cache.get(word)
         if hit is None:
-            self._proc.stdin.write("^" + word + "\n")  # ^ = never treat the line as a command
-            answers = []
-            while (line := self._proc.stdout.readline().rstrip("\n")) != "":
-                answers.append(line)
-            # *: in dictionary, +: via affix, -: compound; &/#: misspelled
-            hit = bool(answers) and all(a[:1] in "*+-" for a in answers)
-            self._cache[word] = hit
+            hit = self._cache[word] = self._check(word)
         return hit
 
     def _extra_known(self, lw: str) -> bool:
@@ -110,6 +93,81 @@ class Speller:
             if not all(self.known(p) for p in parts):
                 unknown.append(token)
         return n, unknown
+
+
+DICT_DIRS = ["/usr/share/hunspell", "/usr/share/myspell/dicts", "/usr/local/share/hunspell",
+             os.path.expanduser("~/.local/share/hunspell")]
+
+
+class _LibHunspell:
+    """libhunspell through ctypes: a yes/no lookup in microseconds.
+
+    The `hunspell -a` pipe answers a misspelled word only after computing suggestions – with the
+    Hungarian dictionary ~0.1 s per unknown word, and the vowel repair probes many unknown
+    candidates. Not thread safe: one Speller is used from one thread at a time.
+    """
+
+    def __init__(self, lib, handle, encoding: str):
+        self._lib, self._h, self._enc = lib, handle, encoding
+
+    @classmethod
+    def open(cls, dictionary: str) -> _LibHunspell | None:
+        name = ctypes.util.find_library("hunspell") or ctypes.util.find_library("hunspell-1.7")
+        base = dictionary if os.path.sep in dictionary else next(
+            (os.path.join(d, dictionary) for d in DICT_DIRS
+             if os.path.exists(os.path.join(d, dictionary + ".dic"))), None)
+        if name is None or base is None:
+            return None
+        try:
+            lib = ctypes.CDLL(name)
+        except OSError:
+            return None
+        lib.Hunspell_create.restype = ctypes.c_void_p
+        lib.Hunspell_create.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+        lib.Hunspell_spell.restype = ctypes.c_int
+        lib.Hunspell_spell.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        lib.Hunspell_get_dic_encoding.restype = ctypes.c_char_p
+        lib.Hunspell_get_dic_encoding.argtypes = [ctypes.c_void_p]
+        handle = lib.Hunspell_create((base + ".aff").encode(), (base + ".dic").encode())
+        if not handle:
+            return None
+        enc = (lib.Hunspell_get_dic_encoding(handle) or b"UTF-8").decode()
+        return cls(lib, handle, enc)
+
+    def __call__(self, word: str) -> bool:
+        try:
+            raw = word.encode(self._enc)
+        except (UnicodeEncodeError, LookupError):
+            return False
+        return bool(self._lib.Hunspell_spell(self._h, raw))
+
+
+class _PipeHunspell:
+    """Fallback: one long-running `hunspell -a` process (ispell pipe protocol)."""
+
+    def __init__(self, dictionary: str):
+        exe = shutil.which("hunspell")
+        if exe is None:
+            raise RuntimeError("spell step needs libhunspell or the hunspell CLI, plus the dictionary "
+                               "(Arch/Manjaro: sudo pacman -S hunspell hunspell-hu), "
+                               "or set spell: {enabled: false}")
+        self._proc = subprocess.Popen(
+            [exe, "-a", "-i", "UTF-8", "-d", dictionary],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", bufsize=1,
+        )
+        banner = self._proc.stdout.readline()
+        if not banner.startswith("@"):
+            err = self._proc.stderr.read() if self._proc.poll() is not None else banner
+            raise RuntimeError(f"hunspell -d {dictionary} failed: {err.strip()}")
+
+    def __call__(self, word: str) -> bool:
+        self._proc.stdin.write("^" + word + "\n")  # ^ = never treat the line as a command
+        answers = []
+        while (line := self._proc.stdout.readline().rstrip("\n")) != "":
+            answers.append(line)
+        # *: in dictionary, +: via affix, -: compound; &/#: misspelled
+        return bool(answers) and all(a[:1] in "*+-" for a in answers)
 
 
 @lru_cache(maxsize=4)

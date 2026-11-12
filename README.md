@@ -89,6 +89,23 @@ Egyéb parancsok:
 | `bookpecker run <slug> --force` | minden lépés újra |
 | `bookpecker run <slug> --ocr-engine paddle_vl` | OCR motor felülírása (összehasonlításhoz) |
 | `bookpecker assemble <slug>` | csak a Markdown újraépítése a cache-elt OCR-ből |
+| `bookpecker run <slug> -j 6` | párhuzamos CPU-szálak száma (alap: CPU-szám − 2; `-j 1` = soros) |
+
+### Párhuzamos futás
+
+A `run` és a `layout` alapból párhuzamosan dolgozik, hogy a GPU és a CPU-magok egyszerre legyenek
+kihasználva:
+
+- a következő oldalak raszterizálása + előfeldolgozása külön folyamatokban előre fut;
+- a layout és a PP-OCRv5 a fő szálon, oldalanként fut a GPU-n (a modell egyszer van a VRAM-ban);
+- a Tesseract régiónként egy szálkészletben fut (egyszálú tesseract-folyamatok), a GPU-munkával
+  egy időben;
+- a két motor összefésülése és az oldal mentése külön szálon történik, közben a GPU már a következő
+  oldalon dolgozik.
+
+Az eredmény bájtra azonos a soros futáséval. Mérés (Codex, 20 oldal, layout → Markdown, i7-9750H +
+GTX 1650): soros 303 s, párhuzamos 125 s. A GPU-kihasználtság ettől sem lesz magas: a modellek kicsik,
+a kártya oldalanként csak néhány másodpercig dolgozik.
 
 ## Könyv beállítása (`books/<slug>.yaml`)
 

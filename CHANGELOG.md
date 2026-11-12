@@ -5,7 +5,17 @@ A formátum a [Keep a Changelog](https://keepachangelog.com/hu/1.1.0/) ajánlás
 
 ## [Unreleased]
 
+### Added
+- Párhuzamos pipeline (`run`/`layout`, `-j/--workers`, alap: CPU-szám − 2): előfeldolgozás külön
+  folyamatokban előre, Tesseract szálkészletben a GPU-s PP-OCR-rel egy időben, összefésülés és mentés
+  külön szálon. A kimenet bájtra azonos a sorossal; 20 oldalon 303 s → 125 s.
+
 ### Changed
+- Hunspell: szóellenőrzés közvetlenül a libhunspell-lel (ctypes), a `hunspell -a` pipe csak
+  tartalék. A pipe minden ismeretlen szóhoz javaslatokat is számolt (magyar szótárral ~30–120 ms);
+  a Codex teljes Markdown-összeállítása ~1 óráról 14 s-ra gyorsult, azonos szöveggel.
+- A Tesseract-folyamatok `OMP_THREAD_LIMIT=1`-et kapnak párhuzamos futáskor – csak ők, a saját
+  folyamatunk (Paddle) nem.
 - `books/codex.yaml`: a teljes könyv feldolgozásához kihagyva a borító, előszó, a „A Szerepjátékról…”
   bevezető (PDF 1–9), a tartalomjegyzék (259) és a karakterlap + térkép (262–264).
 

@@ -11,10 +11,33 @@ from ..config import TesseractCfg
 from .base import OcrLine, OcrResult
 
 PAD = 20
+_ENV_OVERRIDES: dict[str, str] = {}
+
+
+def _apply_env() -> None:
+    """pytesseract hands its module-level `environ` to every tesseract process it starts."""
+    import pytesseract.pytesseract as pt
+
+    pt.environ = {**os.environ, **_ENV_OVERRIDES} if _ENV_OVERRIDES else os.environ
+
+
+def limit_threads(n: int | None) -> None:
+    """OpenMP threads per tesseract process (None: tesseract's default).
+
+    Only the tesseract child processes get the limit – setting OMP_THREAD_LIMIT in our own
+    environment would also cap Paddle's CPU kernels in this process. A limit the user exported
+    is left alone.
+    """
+    if n and "OMP_THREAD_LIMIT" not in os.environ:
+        _ENV_OVERRIDES["OMP_THREAD_LIMIT"] = str(n)
+    else:
+        _ENV_OVERRIDES.pop("OMP_THREAD_LIMIT", None)
+    _apply_env()
 
 
 class TesseractEngine:
     name = "tesseract"
+    cpu_only = True  # thread safe (one tesseract process per call): may run in a worker pool
 
     def __init__(self, languages: list[str], cfg: TesseractCfg):
         import pytesseract
@@ -24,6 +47,7 @@ class TesseractEngine:
         self.cfg = cfg
         if cfg.tessdata_dir:
             os.environ["TESSDATA_PREFIX"] = os.path.abspath(cfg.tessdata_dir)
+            _apply_env()
         available = set(pytesseract.get_languages(config=""))
         missing = [lang for lang in languages if lang not in available]
         if missing:
