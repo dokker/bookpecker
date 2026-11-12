@@ -19,6 +19,7 @@ from typing import Iterable
 
 WORD_RE = re.compile(r"[^\W\d_]+")
 TOKEN_RE = re.compile(r"[^\W\d_]+(?:-[^\W\d_]+)*")
+SUFFIX_AFTER = re.compile(r"[\d%°]-$")  # text up to a token: it is a number's suffix
 # vowels an OCR engine mixes up; a letter may only become another member of its class
 CLASSES = ["aá", "eé", "ií", "oóöő", "uúüű"]
 CONFUSABLE = {c: cls.replace(c, "") for cls in CLASSES for c in cls}
@@ -28,6 +29,8 @@ for base, letters in FOREIGN.items():
     cls = next((c for c in CLASSES if base in c), base)
     CONFUSABLE |= {f: cls for f in letters}
 CONFUSABLE |= {c.upper(): v.upper() for c, v in CONFUSABLE.items()}
+# abbreviations the tokenizer sees without their full stop ("stb." → "stb")
+ABBREVIATIONS = {"stb", "ill", "max", "min", "pl", "kb", "vö", "ún", "db", "uo", "ld", "ford", "jav"}
 MAX_CHANGES = 2
 MAX_SUFFIX = 6  # letters a book-specific word may be inflected with
 
@@ -36,7 +39,7 @@ class Speller:
     def __init__(self, dictionary: str = "hu_HU", words: Iterable[str] = ()):
         self._check = _LibHunspell.open(dictionary) or _PipeHunspell(dictionary)
         self._cache: dict[str, bool] = {}
-        self.extra = {w.lower() for w in words}
+        self.extra = {w.lower() for w in words} | ABBREVIATIONS
 
     def known(self, word: str) -> bool:
         if not word or self._extra_known(word.lower()):
@@ -79,10 +82,13 @@ class Speller:
         """(number of checked words, the unknown ones) – words of 3+ letters only.
 
         Hyphenated tokens count as one word; a suffix after an abbreviation ("TÉ-jét", "KM-mel")
-        is not checked.
+        or a number ("5%-kal", "3-nál") is not checked.
         """
         n, unknown = 0, []
-        for token in TOKEN_RE.findall(text):
+        for m in TOKEN_RE.finditer(text):
+            if SUFFIX_AFTER.search(text, max(0, m.start() - 2), m.start()):
+                continue  # "10%-kal", "k10-zel": a suffix, not a word
+            token = m.group()
             parts = token.split("-")
             if parts[0].isupper() and len(parts[0]) <= 4:
                 parts = parts[:1]

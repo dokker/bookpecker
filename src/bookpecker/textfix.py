@@ -23,16 +23,24 @@ SUSPENDED_NEXT = {"és", "vagy", "s", "illetve", "valamint", "avagy", "meg", "se
 BULLET_RE = re.compile(r"^[•·▪■◆●○‣*]")  # always a new item, even without final punctuation
 # numbered/lettered items and dialogue dashes: new paragraph only after a finished sentence
 ITEM_RE = re.compile(r"^([-–—]\s|\d{1,3}[.)]\s|[a-z][.)]\s)")
-HYPHEN_JUNK = re.compile(r"(?<=[^\W\d_])([-‐¬])[.,:;]+$")
+# gutter specks after a line-end hyphen: "tudá-,", "ka--", "sze-–", "véreke- ,"
+HYPHEN_JUNK = re.compile(r"(?<=[^\W\d_])([-‐¬])(?:[-‐¬–]|\s?[.,:;]+)+$")
+# specks before the first word of a line, read as punctuation or a bullet: ", dezni", "*sen"
+LEAD_JUNK = re.compile(r"^[*.,:;]+\s*(?=[a-záéíóöőúüű])")
+# hyphen read as a full stop: "fegy." + "ver" (only joined when the dictionary agrees)
+DOT_TAIL = re.compile(r"[^\W\d_]{2,}\.$")
 WORD_TAIL = re.compile(r"[^\W\d_]{2,}$")
 WORD_HEAD = re.compile(r"[^\W\d_]{2,}")
+# what a hyphenated suffix attaches to: a number ("10-zel", "5%-kal", "k10-zel") or an
+# all-caps abbreviation ("VÉ-je", "SFÉ-t", "KM-mel")
+SUFFIX_HOST = re.compile(r"(?:\d[%°]?|(?<![^\W\d_])[A-ZÁÉÍÓÖŐÚÜŰ]{2,5})$")
 LIGATURES = {"ﬁ": "fi", "ﬂ": "fl", "ﬀ": "ff", "ﬃ": "ffi", "ﬄ": "ffl"}
 
 
 def clean(text: str) -> str:
     for k, v in LIGATURES.items():
         text = text.replace(k, v)
-    return re.sub(r"[ \t]+", " ", text).strip()
+    return LEAD_JUNK.sub("", re.sub(r"[ \t]+", " ", text).strip())
 
 
 def ends_sentence(text: str) -> bool:
@@ -62,6 +70,9 @@ def join_lines(a: str, b: str, known: Known | None = None) -> str:
         return b
     if not b:
         return a
+    if a.endswith(HYPHENS) and SUFFIX_HOST.search(a[:-1]) and b[0].islower() \
+            and b.split(" ", 1)[0].lower() not in SUSPENDED_NEXT:
+        return a + b  # suffix on a number or abbreviation: "10-" + "zel", "VÉ-" + "je"
     if a.endswith(HYPHENS) and len(a) > 1 and a[-2].isalpha():
         first = b.split(" ", 1)[0]
         if first.lower() in SUSPENDED_NEXT:
@@ -75,6 +86,10 @@ def join_lines(a: str, b: str, known: Known | None = None) -> str:
                     return a[:-1] + "-" + b
             return a[:-1] + b
         return a[:-1] + "-" + b  # real compound hyphen: "Kard-" + "Mágia"
+    if known is not None and b[0].islower() and DOT_TAIL.search(a):
+        left, right = WORD_TAIL.search(a[:-1]), WORD_HEAD.match(b)
+        if left and right and not known(left.group()) and known(left.group() + right.group()):
+            return a[:-1] + b  # "fegy." + "verek" → "fegyverek"
     if known is not None and b[0].islower():
         # hyphen lost in the gutter shadow: "jelentke" + "zik" → "jelentkezik"
         left, right = WORD_TAIL.search(a), WORD_HEAD.match(b)

@@ -21,7 +21,14 @@ ocr:
   # table: paddle_vl            # e.g. VLM only for tables
 languages: [hun]
 spell:                          # Hunspell post-correction + out/codex/quality.md
-  words: [Abryss, Nadysson, sytisi, mentalior, Homonculus, Zorawa, grimoár, Mana]
+  words: [Abryss, Nadysson, sytisi, mentalior, Homonculus, Zorawa, grimoár, Mana,
+          # names, peoples, places
+          Nadyss, Shagír, Dún, dúnok, Sytis, Shinwa, Shinwara, Miraclea, Ardúnia, Morte, Silmoris,
+          Shin, quor, Shril, Shrîl, Ashra, Naisur, Quâboa, Zora, Carvis, Abyrnoss, Csorbatorony,
+          gorg, kharag, khírin, câsquor, ghodi,
+          # game terms and abbreviations
+          SFÉ, MGT, NJK, lin, ark, Herbalizmus, mágiaellenállás, asztrálmágia, nemesúr,
+          másfélkezes, kettősívű, távolbaható, rövidkard, evilági, helyiérték]
 heading_levels: flat            # flat: every heading "##" | auto: from glyph size
 
 sidebars:

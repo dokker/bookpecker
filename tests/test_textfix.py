@@ -1,5 +1,5 @@
 from bookpecker.ocr.base import OcrLine
-from bookpecker.textfix import join_lines, paragraphs, should_continue, single_line
+from bookpecker.textfix import clean, join_lines, paragraphs, should_continue, single_line
 
 H = 30  # line height used in fixtures
 
@@ -93,3 +93,31 @@ def test_lost_hyphen_rejoined_by_dictionary():
     assert join_lines("Itt jelentke", "zik a", known) == "Itt jelentkezik a"
     assert join_lines("a kard", "mágia", known) == "a kard mágia"  # both words: keep the space
     assert join_lines("Itt jelentke", "zik a") == "Itt jelentke zik a"  # no dictionary
+
+
+def test_suffix_on_number_or_abbreviation_keeps_hyphen_without_space():
+    assert join_lines("a kisebbik k10-", "zel sebez") == "a kisebbik k10-zel sebez"
+    assert join_lines("maximum 5%-", "kal nő") == "maximum 5%-kal nő"
+    assert join_lines("MGT 2-", "nél –20") == "MGT 2-nél –20"
+    assert join_lines("a VÉ-", "je nő") == "a VÉ-je nő"
+    assert join_lines("az 1-", "es és 2-es") == "az 1-es és 2-es"
+    assert join_lines("a 2-", "és 3-szoros") == "a 2- és 3-szoros"  # suspended
+    assert join_lines("VARÁZSLÓ-", "ként") == "VARÁZSLÓként"  # a word, not an abbreviation
+
+
+def test_gutter_specks_around_line_end_hyphen():
+    assert join_lines("és felfe-", clean(", dezni a")) == "és felfedezni a"
+    assert join_lines("a ka--", "rakteréről") == "a karakteréről"
+    assert join_lines("véreke- ,", "désért") == "véreke" + "désért"
+    assert join_lines("sze-–", "rint") == "szerint"
+    assert clean("*sen megítélni") == "sen megítélni"
+    assert clean("* kat, jó") == "kat, jó"
+    assert clean("* Alma") == "* Alma"  # a bullet before a capital stays
+    assert join_lines("egy –", "kettő") == "egy – kettő"
+
+
+def test_hyphen_read_as_full_stop_joined_by_dictionary():
+    words = {"fegyverek", "ver", "alma"}
+    known = words.__contains__
+    assert join_lines("a fegy.", "verek", known) == "a fegyverek"
+    assert join_lines("az alma.", "verek", known) == "az alma. verek"  # left half is a word

@@ -69,6 +69,8 @@ def test_speller_repairs_only_unambiguous_vowel_confusions():
     assert sp.fix_text("Abryss városa") == "Abryss városa"  # unknown name stays
     n, unknown = sp.unknown_words("A mérgező Abryss")
     assert n == 2 and unknown == ["Abryss"]
+    n, unknown = sp.unknown_words("5%-kal és k10-zel, 3-nál")  # suffixes of numbers: no words
+    assert n == 0 and unknown == []
 
 
 def test_similar_known_secondary_word_replaces_misread():

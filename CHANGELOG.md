@@ -5,6 +5,15 @@ A formátum a [Keep a Changelog](https://keepachangelog.com/hu/1.1.0/) ajánlás
 
 ## [Unreleased]
 
+### Fixed
+- Sor végén elválasztott rag szám vagy rövidítés után: `10-⏎zel` → `10-zel` (eddig `10- zel`),
+  `VÉ-⏎je` → `VÉ-je` (eddig `VÉje`).
+- Gerinc melletti pöttyök: sor eleji `*`/írásjel-szemét kisbetű előtt törölve (eddig a `*`
+  felsorolásnak számított, és szó közepén is új bekezdést nyitott); sor végi `--`, `-–`, `- ,`
+  egy elválasztójellé; ponttá olvasott elválasztójel (`fegy.` + `verek`) szótár alapján összevonva.
+- Minőségi riport: számok ragjai (`5%-kal`, `3-nál`) és a pont nélkül látott rövidítések (`stb`,
+  `ill`, `max`…) nem számítanak ismeretlen szónak.
+
 ### Added
 - `margin_notes` layout-opció (alapból ki): a fő szövegtömbtől oldalra eső keskeny szövegblokkok
   (külső margós széljegyzetek) egy sidebar-csoportba kerülnek, alapból az oldal végére – nem
