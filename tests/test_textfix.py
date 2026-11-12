@@ -121,3 +121,10 @@ def test_hyphen_read_as_full_stop_joined_by_dictionary():
     known = words.__contains__
     assert join_lines("a fegy.", "verek", known) == "a fegyverek"
     assert join_lines("az alma.", "verek", known) == "az alma. verek"  # left half is a word
+
+
+def test_split_long_digraph_restored_by_dictionary():
+    known = {"amennyiben", "asszony", "jobbágygyerek", "jobbágy", "gyerek"}.__contains__
+    assert join_lines("ameny-", "nyiben jön", known) == "amennyiben jön"
+    assert join_lines("az asz-", "szony", known) == "az asszony"
+    assert join_lines("a jobbágy-", "gyerek", known) == "a jobbágygyerek"

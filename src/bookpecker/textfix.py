@@ -84,6 +84,10 @@ def join_lines(a: str, b: str, known: Known | None = None) -> str:
                 if left and right and not known(left.group() + right.group()) \
                         and known(left.group()) and known(right.group()):
                     return a[:-1] + "-" + b
+            if known is not None:
+                doubled = _double_digraph(a[:-1], b, known)
+                if doubled:
+                    return doubled
             return a[:-1] + b
         return a[:-1] + "-" + b  # real compound hyphen: "Kard-" + "Mágia"
     if known is not None and b[0].islower() and DOT_TAIL.search(a):
@@ -98,6 +102,25 @@ def join_lines(a: str, b: str, known: Known | None = None) -> str:
                 and known(left.group() + right.group()):
             return a + b
     return f"{a} {b}"
+
+
+DIGRAPHS = ("dzs", "sz", "zs", "cs", "ny", "gy", "ty", "ly", "dz")
+
+
+def _double_digraph(a: str, b: str, known: Known) -> str | None:
+    """Hungarian hyphenation splits a long digraph in two: "meny-nyi" is "mennyi", "asz-szony" is
+    "asszony". Only when the dictionary knows that form and not the plain join – "jobbágy-gyerek"
+    is a compound and stays "jobbágygyerek"."""
+    left, right = WORD_TAIL.search(a), WORD_HEAD.match(b)
+    if not (left and right):
+        return None
+    lw, rw = left.group(), right.group()
+    for d in DIGRAPHS:
+        if lw.lower().endswith(d) and rw.lower().startswith(d) and len(lw) > len(d):
+            cand = lw[:-len(d)] + lw[-len(d)] + rw
+            if known(cand) and not known(lw + rw):
+                return a[:-len(d)] + a[-len(d)] + b
+    return None
 
 
 def _has_geometry(lines: list[OcrLine]) -> bool:

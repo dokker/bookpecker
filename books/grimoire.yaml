@@ -23,7 +23,12 @@ ocr:
   # table: paddle_vl            # e.g. VLM only for tables
 languages: [hun]
 spell:                          # Hunspell post-correction + out/<slug>/quality.md
-  words: [Abryss, Nadysson, sytisi, Zorawa, grimoár, Mana]                   # names, game terms (inflected forms are accepted too)
+  words: [Abryss, Nadysson, sytisi, Zorawa, grimoár, Mana, Manaigény, Manapont, Grimoire,
+          Arkánum, mágiaellenállás, asztrálmágia, szabadmágia, Nagyiskola, Evokáció, Theurgia,
+          Nekromancia, nekromanta, Goécia, tegumentum, defensis, elementál, evilági, Távolbahatás,
+          lélekkovácsolt, nagyhatalmú,
+          Shin, Shinwa, Ardún, Ardúnia, Dún, dúnok, Agartha, Nir, Anis, Nadyss, Trigani, Mithisi,
+          Aiki, Sytis, shagíri, NJK]                   # names, game terms (inflected forms are accepted too)
 heading_levels: flat            # flat: every heading "##" | auto: from glyph size
 
 sidebars:
@@ -32,6 +37,11 @@ sidebars:
   placement: inline             # inline | page_end
 
 # drop_kinds: [header, footer, page_number, ornament, figure]
+
+# "k10" (ten-sided die) read as "kio"/"kıo"/"kl0"
+replacements:
+  - pattern: '\bk[iıl1I][oO0]\b'
+    repl: 'k10'
 
 page_overrides: {}
 #  "37-42": {columns: 1}

@@ -11,6 +11,10 @@ A formátum a [Keep a Changelog](https://keepachangelog.com/hu/1.1.0/) ajánlás
 - Gerinc melletti pöttyök: sor eleji `*`/írásjel-szemét kisbetű előtt törölve (eddig a `*`
   felsorolásnak számított, és szó közepén is új bekezdést nyitott); sor végi `--`, `-–`, `- ,`
   egy elválasztójellé; ponttá olvasott elválasztójel (`fegy.` + `verek`) szótár alapján összevonva.
+- Kettős mássalhangzó elválasztása: `meny-⏎nyiben` → `mennyiben`, `asz-⏎szony` → `asszony`
+  (szótár alapján; a `jobbágy-gyerek` típusú összetétel marad).
+- `grimoire.yaml`: `kio`/`kıo` → `k10` csere, nevek és játékkifejezések a szólistán (ismeretlen
+  szavak aránya 2,97% → 1,80%).
 - Minőségi riport: számok ragjai (`5%-kal`, `3-nál`) és a pont nélkül látott rövidítések (`stb`,
   `ill`, `max`…) nem számítanak ismeretlen szónak.
 
