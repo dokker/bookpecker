@@ -5,7 +5,18 @@ A formátum a [Keep a Changelog](https://keepachangelog.com/hu/1.1.0/) ajánlás
 
 ## [Unreleased]
 
+### Added
+- `hanging_indent` oldal szintű opció szójegyzékekhez („szó (ejtés) – jelentés”, a folytatósorok
+  behúzva): a balra kilógó sor új bekezdés akkor is, ha az előző nem mondatvég, és a régiók nem
+  fűződnek össze. Behúzott első sorú régióban a normál bekezdésszabály marad.
+- `books/hegyi-kiralysag.yaml`: Codex – A Hegyi Királyság (108 DPI, díszkeretes oldalak,
+  borító és térképek kihagyva, a vörös díszbetűs fejezetcímek javítása, nador szavak a szólistán:
+  ismeretlen szavak aránya 4,5% → 2,0%, szójegyzék függő behúzással).
+
 ### Fixed
+- Duplikált sor: a layout-modell a bekezdés dobozán túllógó egysoros dobozt is adhat ugyanarra a
+  sorra; a duplikátum-küszöb 80% → 70% átfedés (Codex 2, Grimoire 3, Hegyi Királyság 1 ismétlődő sor
+  tűnt el). A már cache-elt layoutot csak `--from layout` frissíti.
 - Sor végén elválasztott rag szám vagy rövidítés után: `10-⏎zel` → `10-zel` (eddig `10- zel`),
   `VÉ-⏎je` → `VÉ-je` (eddig `VÉje`).
 - Gerinc melletti pöttyök: sor eleji `*`/írásjel-szemét kisbetű előtt törölve (eddig a `*`

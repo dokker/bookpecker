@@ -127,8 +127,11 @@ def _has_geometry(lines: list[OcrLine]) -> bool:
     return all(len(ln.box) == 4 for ln in lines)
 
 
-def paragraph_breaks(lines: list[OcrLine]) -> list[bool]:
-    """breaks[i] is True when a new paragraph starts at lines[i] (i ≥ 1)."""
+def paragraph_breaks(lines: list[OcrLine], hanging: bool = False) -> list[bool]:
+    """breaks[i] is True when a new paragraph starts at lines[i] (i ≥ 1).
+
+    `hanging`: glossary style – every flush-left line starts an entry, indented lines continue it.
+    """
     n = len(lines)
     breaks = [False] * n
     if n < 2:
@@ -143,6 +146,11 @@ def paragraph_breaks(lines: list[OcrLine]) -> list[bool]:
         xs1 = sorted(ln.box[2] for ln in lines)
         left = xs0[len(xs0) // 10]
         right = xs1[(len(xs1) * 9) // 10]
+        if hanging and lines[0].box[0] - left < 0.6 * H:  # first line indented → normal paragraph
+            for i in range(1, n):
+                flush = lines[i].box[0] - left < 0.5 * H
+                breaks[i] = flush and not lines[i - 1].text.rstrip().endswith(("-", "–"))
+            return breaks
     for i in range(1, n):
         prev, cur = lines[i - 1], lines[i]
         if is_bullet(cur.text):
@@ -164,11 +172,11 @@ def paragraph_breaks(lines: list[OcrLine]) -> list[bool]:
     return breaks
 
 
-def paragraphs(lines: list[OcrLine], known: Known | None = None) -> list[str]:
+def paragraphs(lines: list[OcrLine], known: Known | None = None, hanging: bool = False) -> list[str]:
     lines = [OcrLine(clean(ln.text), ln.box, ln.par, ln.conf) for ln in lines if clean(ln.text)]
     if not lines:
         return []
-    breaks = paragraph_breaks(lines)
+    breaks = paragraph_breaks(lines, hanging)
     out: list[str] = []
     cur = ""
     for ln, brk in zip(lines, breaks):

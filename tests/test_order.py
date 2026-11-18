@@ -81,6 +81,16 @@ def test_dedupe_container_and_duplicate():
     assert dup_inner.dropped == "duplicate" and dup_outer.dropped is None
 
 
+def test_dedupe_line_sticking_out_of_its_block():
+    """A one-line box 75 % inside the paragraph box holding the same line is still a duplicate."""
+    from bookpecker.layout.filters import dedupe
+
+    block = R("block", 100, 110, 900, 300)
+    line = R("line", 100, 100, 800, 140)
+    dedupe([block, line])
+    assert line.dropped == "duplicate" and block.dropped is None
+
+
 def test_margin_notes_found_beside_main_block():
     from bookpecker.config import MarginNotesCfg
     from bookpecker.layout.filters import find_margin_notes

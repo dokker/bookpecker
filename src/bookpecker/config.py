@@ -135,6 +135,7 @@ class PageConfig(_Model):
     doclayout: DocLayoutCfg = Field(default_factory=DocLayoutCfg)
     sidebars: SidebarCfg = Field(default_factory=SidebarCfg)
     margin_notes: MarginNotesCfg = Field(default_factory=MarginNotesCfg)
+    hanging_indent: bool = False  # glossary pages: flush-left line = new entry, regions never joined
     drop_kinds: list[RegionKind] = Field(
         default_factory=lambda: ["header", "footer", "page_number", "ornament", "figure"]
     )

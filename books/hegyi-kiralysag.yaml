@@ -1,0 +1,62 @@
+# bookpecker book config – every key except `pdf` is optional (defaults in config.py /
+# config/defaults.yaml). Page numbers are 1-based PDF page indices.
+title: "A Hegyi Királyság"
+pdf: "/home/docker/Dropbox/books/codex/Hegyi Királyság.pdf"
+
+first_page_side: left           # PDF 3 = printed p. 8 (verso, ornate border on the left)
+skip_pages: [1, "79-81"]        # cover; Naoenao map, rotated map legend, region map
+page_number_offset: 5           # printed page = PDF page + offset (only for <!-- page --> markers)
+
+dpi: 108                        # page images are ~200 dpi at 72 pt/px: 1.5× ≈ the Codex 300 dpi scale
+columns: auto
+margins:                        # heavy ornamental frame on the outer edge, top and bottom
+  top: 0.06
+  bottom: 0.06
+  inner: 0.01
+  outer: 0.06
+
+layout_engine: doclayout
+ocr:
+  default: ensemble
+languages: [hun]
+spell:
+  words: [Abryss, Abrÿss, Nadyss, Nadysson, Nadír, Nadîr, nador, nadorok, Shîror, Shíror, Naoenao, NJK,
+          Codex, grimoár, Mana, SFÉ, lin, gorg, kharag, ghodi, Herbalizmus, mágiaellenállás, signum,
+          Zorawa, Sytis, sytisi, Shinwa, Dún, dún, dúnok, Ardúnia, Abyrnoss, abyrnossi, shagrin, shagíri,
+          abrin, abrîn, seth, arquig, Qsantim, Siolis, Nioquar, Dorsiss, Mesquino, Solonai, Xsít,
+          # nador words, names, places
+          nagynemzetség, Harcifőnök, Harcisólymok, Feketesólymok, Hegymély, Nagyles, Kékplató,
+          Maooi, Koanooi, Nialahooi, Koalnaonee, Shizaai, Inaan, Naikal, Naikaal, Kiaraino, Kiarnaio,
+          Arrieer, Zarr, Zarranaai, Hína, Roanaai, Hanaai, Moanaai, Eva, Akana, Lai, Laoon, Kva, Akaan,
+          Naa, Hoa, Shiir, Shaan, Shaor, Yaa, Yasin, Yarra, Yalkaneer, Markenao, Morinaoroo,
+          Votahaan, Kiriaai, Kiriann, Kiaai, Ranaaino, Iniin, Norao, Shensaai, Yeonai, Enail, Mailaal,
+          Vain, Elk, Eanai, Oiniin, Ianil, Sienn, Mainoo, Shintaai, Donmeei, Naihiin, Messzivég,
+          Ioena, Topakaan, Saaisaan, Ininoa, Maioine, Oneino, Hiil, Naan, Hoaan, Shroai,
+          nillit, naooni, shinaan, yaooni, móri, mórinai, yaun, yiirsh, shaani, shonin, semseniir,
+          kerlin, naminao, kvaan, minao, kiina, hainoon, vanaai, misk, nauri, naipaan, haiko, iko,
+          rikunaa, rímáru, taito, goshi, eino, fiil, duiin, bova, aikhaan, aikhan, ioiniin, tekiina,
+          meikoo, mirtin, shikkanoa, shuaan, shaagorr, szellemmágikus]
+heading_levels: flat
+
+sidebars:
+  lines: true
+  shading: true
+  placement: inline
+
+replacements:
+  - pattern: '\bk[iıl1I][oO0]\b'
+    repl: 'k10'
+  # decorative red chapter titles (script font) the OCR mangles
+  - {pattern: '^A Hegyi B vi Királyság$', repl: 'A Hegyi Királyság'}
+  - {pattern: '^A A Shîror b or bölgye$', repl: 'A Shîror völgye'}
+  - {pattern: '^bl a tékbban$', repl: ''}
+  - {pattern: '^a Jégmadarak Öbléig Naoenaotó!$', repl: 'Naoenaotól a Jégmadarak Öbléig'}
+  - {pattern: '^Tovább a tenger fel er felé$', repl: 'Tovább a tenger felé'}
+  - {pattern: '^Gazdaság, l , kereskedelem$', repl: 'Gazdaság, kereskedelem'}
+  - {pattern: '^Állatbilág$', repl: 'Állatvilág'}
+  - {pattern: '^bNillit$', repl: 'Nillit'}
+  - {pattern: '^A K Ünnepe$', repl: 'A Kő Ünnepe'}
+  - {pattern: '^Akiejtésról:átiratunkban', repl: 'A kiejtésről: átiratunkban'}
+
+page_overrides:
+  "77-78": {hanging_indent: true}   # glossary: "szó (ejtés) – jelentés", continuation lines indented

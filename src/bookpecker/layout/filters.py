@@ -52,7 +52,7 @@ def filter_regions(
     return regions
 
 
-def dedupe(regions: list[Region], inside: float = 0.8) -> None:
+def dedupe(regions: list[Region], inside: float = 0.7) -> None:
     """Layout models may emit a block *and* its parts (e.g. a two-line title three times).
 
     A region holding two or more same-kind regions is dropped as a container; otherwise the

@@ -296,7 +296,7 @@ def assemble_book(book: Book, pages: list[int], log: Log = print) -> Path:
         ocr = {int(k): OcrResult.from_dict(v) for k, v in _load_json(p.ocr).items()}
         fixes = [(f.pattern, f.repl) for f in cfg.replacements]
         items = asm.page_items(layout, ocr, book.printed_page(page), fixes, speller,
-                               cfg.spell.fix_diacritics, cfg.spell.dehyphenate)
+                               cfg.spell.fix_diacritics, cfg.spell.dehyphenate, cfg.hanging_indent)
         per_page.append((page, items))
         all_items.extend(items)
         page_json[page] = {

@@ -128,3 +128,34 @@ def test_split_long_digraph_restored_by_dictionary():
     assert join_lines("ameny-", "nyiben jön", known) == "amennyiben jön"
     assert join_lines("az asz-", "szony", known) == "az asszony"
     assert join_lines("a jobbágy-", "gyerek", known) == "a jobbágygyerek"
+
+
+def test_hanging_indent_glossary_entries():
+    ls = lines(
+        ("misk (miszk) – csizmamokasszin; puha", 0, 900),
+        ("bőrből készített, félmagas szárú láb-", 40, 900),
+        ("beli", 40, 120),
+        ("mori – csekély hatalmú természetszellem", 0, 900),
+        ("morinai – nador csákány", 0, 500),
+        ("Morinaoroo – A Halál Maszkját Viselők; na-", 0, 900),
+        ("dor nagynemzetség", 40, 400),
+    )
+    assert paragraphs(ls, hanging=True) == [
+        "misk (miszk) – csizmamokasszin; puha bőrből készített, félmagas szárú lábbeli",
+        "mori – csekély hatalmú természetszellem",
+        "morinai – nador csákány",
+        "Morinaoroo – A Halál Maszkját Viselők; nador nagynemzetség",
+    ]
+    assert len(paragraphs(ls)) == 1  # without the option: no sentence end → one paragraph
+
+
+def test_hanging_indent_keeps_normal_paragraph_with_indented_first_line():
+    ls = lines(
+        ("A kiejtésről: átiratunkban a páros", 60, 1000),
+        ("hosszú magánhangzóként ejtendő. Az s", 0, 1000),
+        ("sz-ként hangzik, az sh s-ként.", 0, 600),
+    )
+    assert paragraphs(ls, hanging=True) == [
+        "A kiejtésről: átiratunkban a páros hosszú magánhangzóként ejtendő. Az s sz-ként hangzik, "
+        "az sh s-ként."
+    ]

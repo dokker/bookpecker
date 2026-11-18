@@ -21,6 +21,7 @@ class Item:
     height: float = 0.0  # median glyph height of headings, for heading levels
     printed: int | None = None
     level: int = 2
+    standalone: bool = False  # never joined with the previous paragraph (glossary entries)
 
 
 # --- tables ----------------------------------------------------------------------------------
@@ -85,7 +86,8 @@ def apply_replacements(text: str, fixes: list[tuple]) -> str:
 
 def page_items(layout: PageLayout, ocr: dict[int, OcrResult], printed: int | None = None,
                fixes: list[tuple[str, str]] | None = None, speller: Speller | None = None,
-               fix_diacritics: bool = True, dehyphenate: bool = True) -> list[Item]:
+               fix_diacritics: bool = True, dehyphenate: bool = True,
+               hanging_indent: bool = False) -> list[Item]:
     items = [Item("marker", "", layout.page, printed=printed)]
     known = speller.known if speller is not None and dehyphenate else None
     if speller is not None and fix_diacritics:
@@ -113,10 +115,11 @@ def page_items(layout: PageLayout, ocr: dict[int, OcrResult], printed: int | Non
             if text:
                 items.append(Item("caption", text, layout.page, group))
         else:
-            for para in textfix.paragraphs(res.lines, known):
+            for para in textfix.paragraphs(res.lines, known, hanging_indent):
                 para = apply_replacements(para, fixes)
                 if para:
-                    items.append(Item("para", para, layout.page, group))
+                    items.append(Item("para", para, layout.page, group,
+                                      standalone=hanging_indent))
     return items
 
 
@@ -131,7 +134,8 @@ def merge_continuations(items: list[Item], known: textfix.Known | None = None) -
     for it in items:
         if it.type == "para":
             prev = last.get(it.group)
-            if prev is not None and textfix.should_continue(prev.text, it.text):
+            if prev is not None and not it.standalone \
+                    and textfix.should_continue(prev.text, it.text):
                 prev.text = textfix.join_lines(prev.text, it.text, known)
                 continue
             last[it.group] = it
